@@ -45,6 +45,8 @@ Supabase’s built-in email is very rate-limited. For invites (`/dashboard/admin
    - **Sender email / name:** an address Brevo accepts for your account
 3. Save. Invites and password resets then use Brevo instead of Supabase’s shared cap.
 
+**Invite says OK but no email?** This app does not call Brevo’s HTTP API—only Supabase does via SMTP. You do **not** put a Brevo API key in this Next.js project for invites. In Supabase’s SMTP **password** field, paste Brevo’s **SMTP key** (from **SMTP & API** → SMTP), not the long `xkeysib-…` marketing API key. Then check **Supabase Dashboard → Authentication → Logs** for mail errors, **Brevo → Transactional** (or email logs) for delivery, and the recipient’s **spam** folder. Toggle custom SMTP off/on once if settings didn’t apply.
+
 Brevo SMTP reference: [Transactional emails via Brevo SMTP](https://help.brevo.com/hc/en-us/articles/7924908994450-Send-transactional-emails-using-Brevo-SMTP).
 
 **Other free-tier SMTP options** (same Supabase flow, different host/user/pass from each vendor): [Mailjet](https://www.mailjet.com/pricing/), [Elastic Email](https://elasticemail.com/resources/settings/smtp-settings/). [Resend](https://resend.com/pricing) also includes a free monthly allowance if you prefer it once a domain is verified.

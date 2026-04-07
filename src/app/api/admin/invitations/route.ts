@@ -3,6 +3,8 @@ import { z } from "zod";
 import { requireRole } from "@/lib/auth";
 import { adminClient } from "@/lib/supabase/admin";
 import { HttpError, jsonOk, toErrorResponse } from "@/lib/http";
+import { writeAudit } from "@/lib/audit";
+import { getAppUrlFromRequest } from "@/lib/app-url";
 
 function mapInviteAuthError(message: string): Error {
   const lower = message.toLowerCase();
@@ -15,8 +17,6 @@ function mapInviteAuthError(message: string): Error {
   }
   return new Error(message);
 }
-import { writeAudit } from "@/lib/audit";
-import { getAppUrlFromRequest } from "@/lib/app-url";
 
 const schema = z.object({
   email: z.string().email(),

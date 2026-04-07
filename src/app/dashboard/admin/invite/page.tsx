@@ -70,7 +70,7 @@ export default function AdminInvitePage() {
         return;
       }
       toast.success(
-        `Invitation sent to ${json.data?.email ?? email}. They can set a password from the email link.`
+        `Invite queued for ${json.data?.email ?? email}. If no email arrives, check spam and Supabase → Authentication → Logs.`
       );
       setEmail("");
       setFullName("");
@@ -104,9 +104,19 @@ export default function AdminInvitePage() {
       <Card>
         <CardHeader>
           <CardTitle>New account</CardTitle>
-          <CardDescription>
-            Use a unique email. The person receives a message with a link to set
-            their password (configure email under Supabase → Authentication).
+          <CardDescription className="space-y-2">
+            <p>
+              Use a unique email. Supabase sends the message (custom SMTP under
+              Authentication → Emails).
+            </p>
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              <strong>Brevo:</strong> In Supabase SMTP, password must be your{" "}
+              <strong>SMTP key</strong> from Brevo (SMTP &amp; API → SMTP), not
+              the xkeysib-… marketing API key. Username is usually your Brevo
+              login email. Confirm the sender address is allowed in Brevo, then
+              check <strong>Supabase Auth logs</strong> and{" "}
+              <strong>Brevo transactional</strong> logs if mail never arrives.
+            </p>
           </CardDescription>
         </CardHeader>
         <CardContent>
