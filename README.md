@@ -30,19 +30,40 @@ Signup policy:
 - `NEXT_PUBLIC_ALLOW_PUBLIC_SIGNUP=false` (recommended for prod): users must be created/invited by admins.
 - `NEXT_PUBLIC_ALLOW_PUBLIC_SIGNUP=true` (dev/test): enables `/signup` self-registration.
 
-3. Apply migrations:
+### Auth email with free SMTP (recommended)
+
+Supabase’s built-in email is very rate-limited. For invites (`/dashboard/admin/invite`), enable **custom SMTP** in Supabase and use a **free transactional provider** (credentials live only in the Supabase Dashboard, not in this app’s `.env`).
+
+**Option A — [Brevo](https://www.brevo.com/)** (free tier, no card for signup)
+
+1. Sign up → **SMTP & API** → create an **SMTP key** (and add/verify a sender email or domain per their checklist).
+2. **Supabase Dashboard** → **Authentication** → **Emails** → **SMTP settings**:
+   - **Host:** `smtp-relay.brevo.com`
+   - **Port:** `587` (TLS) or `465` (SSL)
+   - **Username:** your Brevo SMTP login (often the email you signed up with—see Brevo’s SMTP page)
+   - **Password:** the **SMTP key** (not the Marketing API key)
+   - **Sender email / name:** an address Brevo accepts for your account
+3. Save. Invites and password resets then use Brevo instead of Supabase’s shared cap.
+
+Brevo SMTP reference: [Transactional emails via Brevo SMTP](https://help.brevo.com/hc/en-us/articles/7924908994450-Send-transactional-emails-using-Brevo-SMTP).
+
+**Other free-tier SMTP options** (same Supabase flow, different host/user/pass from each vendor): [Mailjet](https://www.mailjet.com/pricing/), [Elastic Email](https://elasticemail.com/resources/settings/smtp-settings/). [Resend](https://resend.com/pricing) also includes a free monthly allowance if you prefer it once a domain is verified.
+
+Supabase overview: [Send emails with custom SMTP](https://supabase.com/docs/guides/auth/auth-smtp).
+
+4. Apply migrations:
 
 ```bash
 supabase db push
 ```
 
-4. Seed sample data:
+5. Seed sample data:
 
 ```bash
 psql "$SUPABASE_DB_URL" -f supabase/seed.sql
 ```
 
-5. Run app:
+6. Run app:
 
 ```bash
 npm run dev

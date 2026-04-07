@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { createClient } from "@/lib/supabase/browser";
-import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,7 +17,6 @@ import {
 export default function SignupPage() {
   const allowPublicSignup =
     process.env.NEXT_PUBLIC_ALLOW_PUBLIC_SIGNUP === "true";
-  const router = useRouter();
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -54,7 +52,7 @@ export default function SignupPage() {
 
     if (data.session) {
       setStatus("Signup successful. Redirecting to dashboard...");
-      router.push("/dashboard");
+      window.location.assign("/dashboard");
       return;
     }
 

@@ -2,7 +2,19 @@ import { NextRequest } from "next/server";
 import { z } from "zod";
 import { requireRole } from "@/lib/auth";
 import { adminClient } from "@/lib/supabase/admin";
-import { jsonOk, toErrorResponse } from "@/lib/http";
+import { HttpError, jsonOk, toErrorResponse } from "@/lib/http";
+
+function mapInviteAuthError(message: string): Error {
+  const lower = message.toLowerCase();
+  if (lower.includes("rate limit") || lower.includes("rate_limit")) {
+    return new HttpError(
+      "EMAIL_RATE_LIMIT",
+      "Email rate limit exceeded (Supabase built-in mail is capped). Wait and retry, or add free custom SMTP under Authentication → Emails (e.g. Brevo: smtp-relay.brevo.com). See https://supabase.com/docs/guides/auth/rate-limits",
+      429
+    );
+  }
+  return new Error(message);
+}
 import { writeAudit } from "@/lib/audit";
 import { getAppUrlFromRequest } from "@/lib/app-url";
 
@@ -30,7 +42,7 @@ export async function POST(req: NextRequest) {
         },
         redirectTo
       });
-    if (inviteErr) throw new Error(inviteErr.message);
+    if (inviteErr) throw mapInviteAuthError(inviteErr.message);
 
     const authUserId = created.user?.id;
     if (!authUserId) throw new Error("Failed to create auth user");

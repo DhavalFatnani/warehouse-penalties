@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { FormEvent, Suspense, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/browser";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,7 +18,6 @@ import {
 function LoginForm() {
   const allowPublicSignup =
     process.env.NEXT_PUBLIC_ALLOW_PUBLIC_SIGNUP === "true";
-  const router = useRouter();
   const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -53,7 +52,9 @@ function LoginForm() {
       setError(signInError.message);
       return;
     }
-    router.push("/dashboard");
+    // Full navigation so the next document load sends session cookies to middleware.
+    // router.push alone can race SSR/middleware and leave you on login until refresh.
+    window.location.assign("/dashboard");
   }
 
   return (
@@ -79,7 +80,15 @@ function LoginForm() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor="password">Password</Label>
+                <Link
+                  href="/forgot-password"
+                  className="text-xs font-medium text-primary underline-offset-4 hover:underline"
+                >
+                  Forgot password?
+                </Link>
+              </div>
               <Input
                 id="password"
                 type="password"
@@ -93,7 +102,7 @@ function LoginForm() {
               <p className="text-sm text-destructive">{error}</p>
             ) : null}
             <Button type="submit" className="w-full">
-              Continue
+              Sign in
             </Button>
           </form>
           <p className="mt-4 text-center text-sm text-muted-foreground">

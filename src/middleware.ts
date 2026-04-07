@@ -27,7 +27,9 @@ export async function middleware(req: NextRequest) {
   const isProtected =
     req.nextUrl.pathname.startsWith("/dashboard") ||
     req.nextUrl.pathname.startsWith("/api");
-  const isAuthRoute = req.nextUrl.pathname.startsWith("/login");
+  const isAuthRoute =
+    req.nextUrl.pathname.startsWith("/login") ||
+    req.nextUrl.pathname.startsWith("/forgot-password");
   const isSignupRoute = req.nextUrl.pathname.startsWith("/signup");
 
   if (isProtected && !data.user) {
@@ -46,5 +48,11 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/api/:path*", "/login", "/signup"]
+  matcher: [
+    "/dashboard/:path*",
+    "/api/:path*",
+    "/login",
+    "/signup",
+    "/forgot-password"
+  ]
 };
