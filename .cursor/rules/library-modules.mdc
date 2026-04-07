@@ -1,0 +1,12 @@
+---
+description: Shared lib code — types, pure logic, and HTTP helpers
+globs: src/lib/**/*.ts
+alwaysApply: false
+---
+
+# Library modules (`src/lib`)
+
+- **Purity**: Keep penalty/business logic (e.g. `src/lib/penalty/`) testable and side-effect free where possible.
+- **Types**: Prefer explicit types; avoid `any`. Use Zod-inferred types from validators when sharing shapes with API routes.
+- **Errors**: Use `HttpError` from `@/lib/http` for API-layer failures with status codes; do not catch and swallow errors without handling.
+- **Duplicates**: Extend existing helpers (`warehouse-access`, `query-scope`, `validators`) instead of reimplementing access rules.

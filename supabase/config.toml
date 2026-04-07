@@ -1,0 +1,12 @@
+[db]
+# Local development port. Keep default unless it conflicts.
+port = 54322
+
+[api]
+port = 54321
+schemas = ["public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[studio]
+port = 54323

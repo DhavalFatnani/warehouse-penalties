@@ -1,0 +1,12 @@
+---
+description: Supabase clients, migrations, RLS, and RPC patterns
+globs: ["supabase/**/*.sql", "src/lib/supabase/**/*.ts"]
+alwaysApply: false
+---
+
+# Supabase & SQL
+
+- **Migrations**: Add numbered files under `supabase/migrations/`. Do not edit deployed migrations in place; add a new migration for fixes.
+- **RLS**: New tables need RLS policies consistent with warehouse tenancy (`user_warehouse_access`, `manager_has_warehouse`, etc.). Prefer indexes for common filters; avoid `filter()`-only access paths in hot queries.
+- **RPCs**: `security definer` functions must be narrowly scoped; grant `EXECUTE` only to roles that need it (often `service_role` for server-only operations).
+- **Clients**: Browser → `@/lib/supabase/browser` (`createBrowserClient`). Server/cookies → `@/lib/supabase/server`. Privileged server-only → `@/lib/supabase/admin` (never import admin client in client components).

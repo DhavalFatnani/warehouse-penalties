@@ -1,0 +1,11 @@
+---
+description: Vitest unit tests — layout and conventions
+globs: **/*.test.ts
+alwaysApply: false
+---
+
+# Tests (Vitest)
+
+- **Placement**: Colocate `*.test.ts` next to the module under test (e.g. `calc.test.ts` next to `calc.ts`).
+- **Focus**: Test business logic, guards, and pure helpers; mock Supabase only when testing code that calls it.
+- **Run**: `npm test` before finishing tasks that change behavior; use `npm run test:watch` during development.

@@ -1,0 +1,12 @@
+---
+description: Core project principles for warehouse-penalties (scope, style, verification)
+alwaysApply: true
+---
+
+# Warehouse Penalties — core
+
+- **Stack**: Next.js 14 (App Router), TypeScript, Supabase (Postgres + Auth + RLS), Vitest.
+- **Scope**: Implement only what the task requires. Do not refactor unrelated code, delete comments, or add docs/README unless asked.
+- **Consistency**: Match existing naming, imports (top of file, no inline dynamic imports for deps), and patterns in nearby files.
+- **Security**: Never expose `SUPABASE_SECRET_KEY` or service-role usage to the browser. Client env comes from `NEXT_PUBLIC_*` via `next.config.mjs`.
+- **Verification**: After non-trivial logic changes, run `npm test` and `npm run build`. If dev errors mention missing `./NNN.js` chunks, run `npm run clean` and restart `next dev`.

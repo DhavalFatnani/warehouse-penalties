@@ -1,0 +1,13 @@
+---
+description: Next.js App Router, middleware, and client vs server components
+globs: ["src/app/**/*.tsx", "src/middleware.ts"]
+alwaysApply: false
+---
+
+# Next.js App Router
+
+- **Default to Server Components**. Add `"use client"` only when you need hooks, browser APIs, or event handlers.
+- **Data from APIs**: Dashboard pages that call `/api/*` from the browser are client components; keep fetching and forms colocated with the page unless reused.
+- **Middleware** (`src/middleware.ts`): Session refresh and route protection stay here; do not duplicate auth checks in a way that conflicts with redirects.
+- **Links & env**: Use `<Link>` for internal navigation. After changing `.env`, restart the dev server.
+- **Imports**: Use the `@/` path alias (`@/lib/...`).

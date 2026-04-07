@@ -1,0 +1,14 @@
+---
+description: Route handlers — auth, validation, JSON shape, warehouse scope
+globs: src/app/api/**/route.ts
+alwaysApply: false
+---
+
+# API route handlers
+
+- **Auth**: Start with `requireRole([...])` or `requireSession()` from `@/lib/auth` as appropriate. Admin-only routes use `["admin"]`; manager+admin use `["manager", "admin"]`.
+- **Warehouse scope**: For managers, filter or assert with `getAccessibleWarehouseIds`, `assertWarehouseAccess`, or `@/lib/query-scope` — never trust `warehouse_id` from the client without a check.
+- **Validation**: Parse bodies with Zod schemas from `@/lib/validators` (`safeParse`); pass Zod errors to `toErrorResponse`.
+- **Responses**: Success → `jsonOk(data, status?)` from `@/lib/http`. Errors → `toErrorResponse(e)` in a `try/catch`. Use `HttpError` for explicit status codes.
+- **Supabase**: Use `adminClient` from `@/lib/supabase/admin` in route handlers when RLS-backed user client is insufficient; still enforce authorization in code.
+- **Admin safety**: Role/deactivation changes must use `@/lib/admin-guards` where applicable; log sensitive actions with `@/lib/audit`.
