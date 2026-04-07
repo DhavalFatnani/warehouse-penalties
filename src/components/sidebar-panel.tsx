@@ -3,6 +3,7 @@
 import type { ComponentType } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 import {
   ClipboardList,
   FileSpreadsheet,
@@ -20,7 +21,31 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { SignOutButton } from "@/components/sign-out-button";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 import type { AppRole } from "@/lib/auth";
+
+type MePayload = {
+  id: string;
+  email: string;
+  full_name: string;
+  role: AppRole;
+  is_active: boolean;
+};
+
+function initialsFromUser(fullName: string, email: string): string {
+  const parts = fullName.trim().split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) {
+    return (
+      parts[0].charAt(0) + parts[parts.length - 1].charAt(0)
+    ).toUpperCase();
+  }
+  if (parts.length === 1 && parts[0].length >= 2) {
+    return parts[0].slice(0, 2).toUpperCase();
+  }
+  const e = email.trim();
+  return e.length >= 2 ? e.slice(0, 2).toUpperCase() : "?";
+}
 
 type NavItem = {
   href: string;
@@ -97,6 +122,18 @@ export function SidebarPanel({
   className?: string;
 }) {
   const pathname = usePathname();
+  const [me, setMe] = useState<MePayload | null>(null);
+
+  useEffect(() => {
+    void fetch("/api/me")
+      .then((r) => r.json())
+      .then((json) => {
+        if (json?.data) setMe(json.data as MePayload);
+      })
+      .catch(() => {
+        /* ignore */
+      });
+  }, []);
 
   return (
     <div
@@ -160,9 +197,37 @@ export function SidebarPanel({
           </>
         ) : null}
       </ScrollArea>
-      <div className="flex shrink-0 items-center justify-between gap-2 border-t border-sidebar-border p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
-        <ThemeToggle />
-        <SignOutButton />
+      <div className="shrink-0 border-t border-sidebar-border pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+        <div
+          className="flex items-center gap-2.5 px-3 py-2.5"
+          aria-label="Signed-in user"
+        >
+          <Avatar className="h-9 w-9 ring-1 ring-sidebar-border/80">
+            <AvatarFallback className="bg-sidebar-accent text-xs font-semibold text-sidebar-accent-foreground">
+              {me
+                ? initialsFromUser(me.full_name, me.email)
+                : "…"}
+            </AvatarFallback>
+          </Avatar>
+          <div className="min-w-0 flex-1 text-left">
+            <p className="truncate text-sm font-medium leading-tight text-sidebar-foreground">
+              {me?.full_name ?? "Loading…"}
+            </p>
+            <p className="truncate text-[11px] leading-tight text-muted-foreground">
+              {me?.email ?? "\u00a0"}
+            </p>
+            <Badge
+              variant="secondary"
+              className="mt-1 h-5 border-sidebar-border/80 px-1.5 text-[10px] font-medium capitalize"
+            >
+              {me?.role ?? role}
+            </Badge>
+          </div>
+        </div>
+        <div className="flex items-center justify-between gap-2 border-t border-sidebar-border/60 px-2 py-2">
+          <ThemeToggle />
+          <SignOutButton />
+        </div>
       </div>
     </div>
   );
