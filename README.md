@@ -25,6 +25,8 @@ Required variables:
 
 The browser client reads **`NEXT_PUBLIC_*`** values that are **filled from `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY`** in [`next.config.mjs`](next.config.mjs), so you usually do **not** need duplicate `NEXT_PUBLIC_*` lines in `.env`. After editing `.env`, restart `npm run dev`.
 
+**Vercel / production:** set `NEXT_PUBLIC_APP_URL` to your real origin (e.g. `https://warehouse-payroll.vercel.app`, no trailing slash). If it is left as `http://localhost:3000` in the Vercel project, invite links could point at localhost; the API now falls back to `VERCEL_URL` when it detects that misconfiguration, but you should still set `NEXT_PUBLIC_APP_URL` and **Supabase → Authentication → URL Configuration** (`Site URL` + **Redirect URLs** including `{your-origin}/auth/callback`).
+
 Signup policy:
 
 - `NEXT_PUBLIC_ALLOW_PUBLIC_SIGNUP=false` (recommended for prod): users must be created/invited by admins.
@@ -46,6 +48,8 @@ Supabase’s built-in email is very rate-limited. For invites (`/dashboard/admin
 3. Save. Invites and password resets then use Brevo instead of Supabase’s shared cap.
 
 **Invite says OK but no email?** This app does not call Brevo’s HTTP API—only Supabase does via SMTP. You do **not** put a Brevo API key in this Next.js project for invites. In Supabase’s SMTP **password** field, paste Brevo’s **SMTP key** (from **SMTP & API** → SMTP), not the long `xkeysib-…` marketing API key. Then check **Supabase Dashboard → Authentication → Logs** for mail errors, **Brevo → Transactional** (or email logs) for delivery, and the recipient’s **spam** folder. Toggle custom SMTP off/on once if settings didn’t apply.
+
+**Brevo log: “sender … is not valid”?** The **From** address in Supabase (sender email) must be allowed in Brevo. In Brevo go to **Senders & IP** → **Senders** (or **Domains**) and either **add and verify** that exact address (confirmation email) or **authenticate the domain** (e.g. `knotnow.co`) with DNS (SPF/DKIM). Then set Supabase’s SMTP sender to an address on that verified domain (e.g. `noreply@knotnow.co` after the domain is authenticated).
 
 Brevo SMTP reference: [Transactional emails via Brevo SMTP](https://help.brevo.com/hc/en-us/articles/7924908994450-Send-transactional-emails-using-Brevo-SMTP).
 
