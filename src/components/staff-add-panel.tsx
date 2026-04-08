@@ -23,12 +23,13 @@ import {
 /** Dropdown data for staff forms — prefetched once on the staff hub page. */
 export type StaffPageRefs = {
   warehouses: { id: string; code: string; name: string }[];
-  types: { id: string; display_name: string }[];
+  types: { id: string; code: string; display_name: string }[];
 };
 
 type FormState = {
   full_name: string;
   employee_code: string;
+  phone: string;
   warehouse_id: string | null;
   staff_type_id: string;
 };
@@ -44,6 +45,7 @@ export function StaffAddPanel({ staffRefs, onStaffAdded }: StaffAddPanelProps) {
   const [form, setForm] = useState<FormState>({
     full_name: "",
     employee_code: "",
+    phone: "",
     warehouse_id: null,
     staff_type_id: ""
   });
@@ -81,6 +83,7 @@ export function StaffAddPanel({ staffRefs, onStaffAdded }: StaffAddPanelProps) {
         body: JSON.stringify({
           full_name: form.full_name.trim(),
           employee_code: form.employee_code.trim(),
+          phone: form.phone.trim() || null,
           warehouse_id: form.warehouse_id,
           staff_type_id: form.staff_type_id
         })
@@ -91,6 +94,7 @@ export function StaffAddPanel({ staffRefs, onStaffAdded }: StaffAddPanelProps) {
       setForm({
         full_name: "",
         employee_code: "",
+        phone: "",
         warehouse_id: warehouses.length ? warehouses[0].id : null,
         staff_type_id: types[0]?.id ?? ""
       });
@@ -111,8 +115,8 @@ export function StaffAddPanel({ staffRefs, onStaffAdded }: StaffAddPanelProps) {
       <CardHeader>
         <CardTitle>Details</CardTitle>
         <CardDescription>
-          Enter name, employee ID, warehouse, and staff type. Employee ID must
-          be unique per warehouse.
+          Enter name, employee ID, optional phone, warehouse, and staff type.
+          Employee ID must be unique per warehouse.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -139,6 +143,16 @@ export function StaffAddPanel({ staffRefs, onStaffAdded }: StaffAddPanelProps) {
               }
               required
               className="font-mono"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="phone">Phone (optional)</Label>
+            <Input
+              id="phone"
+              type="tel"
+              value={form.phone}
+              onChange={(e) => setForm({ ...form, phone: e.target.value })}
+              autoComplete="tel"
             />
           </div>
           {warehouses.length > 0 && (

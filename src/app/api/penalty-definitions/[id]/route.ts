@@ -2,12 +2,18 @@ import { NextRequest } from "next/server";
 import { adminClient } from "@/lib/supabase/admin";
 import { penaltyDefinitionSchema } from "@/lib/validators";
 import { requireRole } from "@/lib/auth";
-import { jsonOk, toErrorResponse } from "@/lib/http";
+import { HttpError, jsonOk, toErrorResponse } from "@/lib/http";
 import { replacePenaltyDefinitionStaffTypes } from "@/lib/penalty-definition-staff-types";
 import {
   normalizePenaltyDefinition,
   PENALTY_DEFINITION_SELECT
 } from "@/lib/penalty-definitions-api";
+import {
+  assertPenaltyCodeActiveForUse,
+  assertPenaltyCodeMatchesDefinitionWarehouse,
+  fetchPenaltyCodeWarehouse
+} from "@/lib/penalty-code-guards";
+import { assertWarehouseAccess } from "@/lib/warehouse-access";
 import { z } from "zod";
 
 const patchSchema = penaltyDefinitionSchema
@@ -23,7 +29,7 @@ export async function PATCH(
   { params }: { params: { id: string } }
 ) {
   try {
-    await requireRole(["manager", "admin"]);
+    const { appUser } = await requireRole(["manager", "admin"]);
     const body = await req.json();
     const parsed = patchSchema.safeParse(body);
     if (!parsed.success) {
@@ -32,6 +38,45 @@ export async function PATCH(
 
     const { staff_type_ids, ...patch } = parsed.data;
     const hasDefFields = Object.keys(patch).length > 0;
+
+    const { data: cur, error: curErr } = await adminClient
+      .from("penalty_definitions")
+      .select("warehouse_id, penalty_code_id")
+      .eq("id", params.id)
+      .single();
+    if (curErr || !cur) {
+      throw new HttpError("NOT_FOUND", "Penalty definition not found", 404);
+    }
+
+    if (patch.warehouse_id !== undefined && patch.warehouse_id) {
+      await assertWarehouseAccess(
+        appUser.id,
+        appUser.role,
+        patch.warehouse_id
+      );
+    }
+
+    if (
+      patch.penalty_code_id !== undefined ||
+      patch.warehouse_id !== undefined
+    ) {
+      const mergedWh =
+        patch.warehouse_id !== undefined
+          ? patch.warehouse_id
+          : (cur.warehouse_id as string | null);
+      const mergedCodeId =
+        patch.penalty_code_id !== undefined
+          ? patch.penalty_code_id
+          : (cur.penalty_code_id as string);
+      const cw = await fetchPenaltyCodeWarehouse(adminClient, mergedCodeId);
+      const codeChanging =
+        patch.penalty_code_id !== undefined &&
+        patch.penalty_code_id !== cur.penalty_code_id;
+      if (codeChanging) {
+        assertPenaltyCodeActiveForUse(cw);
+      }
+      assertPenaltyCodeMatchesDefinitionWarehouse(cw.warehouse_id, mergedWh);
+    }
 
     if (hasDefFields) {
       const { error } = await adminClient

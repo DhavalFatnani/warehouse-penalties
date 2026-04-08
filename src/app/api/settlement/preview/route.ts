@@ -19,6 +19,8 @@ export async function GET(req: NextRequest) {
     const parsed = settlementPreviewQuerySchema.safeParse({
       incident_date_from: sp.get("incident_date_from") ?? undefined,
       incident_date_to: sp.get("incident_date_to") ?? undefined,
+      all_time: sp.get("all_time") ?? undefined,
+      status: sp.get("status") ?? undefined,
       warehouse_id: sp.get("warehouse_id") || undefined,
       staff_id: sp.get("staff_id") || undefined,
       staff_type_id: sp.get("staff_type_id") || undefined,
@@ -29,12 +31,15 @@ export async function GET(req: NextRequest) {
     const {
       incident_date_from: from,
       incident_date_to: to,
+      all_time: allTime,
+      status: statusParam,
       warehouse_id: warehouseId,
       staff_id: staffIdFilter,
       staff_type_id: staffTypeIdFilter,
       group_by: groupByParam
     } = parsed.data;
     const groupBy: GroupBy = groupByParam ?? "staff";
+    const statusFilter = statusParam ?? "created";
 
     if (warehouseId && appUser.role !== "admin") {
       await assertWarehouseAccess(appUser.id, appUser.role, warehouseId);
@@ -46,11 +51,15 @@ export async function GET(req: NextRequest) {
       let q = adminClient
         .from("v_penalty_records_with_staff")
         .select("*")
-        .eq("status", "created")
         .order("incident_date", { ascending: true });
 
-      if (from) q = q.gte("incident_date", from);
-      if (to) q = q.lte("incident_date", to);
+      if (statusFilter === "created") q = q.eq("status", "created");
+      else if (statusFilter === "settled") q = q.eq("status", "settled");
+
+      if (!allTime) {
+        if (from) q = q.gte("incident_date", from);
+        if (to) q = q.lte("incident_date", to);
+      }
       if (warehouseId) q = q.eq("warehouse_id", warehouseId);
       if (staffIdFilter) q = q.eq("staff_id", staffIdFilter);
       if (staffTypeIdFilter) q = q.eq("staff_type_id", staffTypeIdFilter);
@@ -83,9 +92,13 @@ export async function GET(req: NextRequest) {
         staffIds,
         warehouseId,
         (q) => {
-          let x = q.eq("status", "created");
-          if (from) x = x.gte("incident_date", from);
-          if (to) x = x.lte("incident_date", to);
+          let x = q;
+          if (statusFilter === "created") x = x.eq("status", "created");
+          else if (statusFilter === "settled") x = x.eq("status", "settled");
+          if (!allTime) {
+            if (from) x = x.gte("incident_date", from);
+            if (to) x = x.lte("incident_date", to);
+          }
           if (staffIdFilter) x = x.eq("staff_id", staffIdFilter);
           if (staffTypeIdFilter) x = x.eq("staff_type_id", staffTypeIdFilter);
           return x.order("incident_date", { ascending: true }).limit(5000);
@@ -104,7 +117,9 @@ export async function GET(req: NextRequest) {
     return jsonOk({
       groups,
       record_ids: list.map((r) => String(r.id)),
-      group_by: groupBy
+      group_by: groupBy,
+      status_filter: statusFilter,
+      all_time: allTime
     });
   } catch (e) {
     return toErrorResponse(e);

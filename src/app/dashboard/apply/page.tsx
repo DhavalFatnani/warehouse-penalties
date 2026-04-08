@@ -19,12 +19,18 @@ import {
   SelectTrigger,
   SelectValue
 } from "@/components/ui/select";
+import { StaffSearchCombobox } from "@/components/staff-search-combobox";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 
 type StaffRow = { id: string; full_name: string; employee_code: string };
-type DefRow = { id: string; title: string; default_amount?: number | null };
+type DefRow = {
+  id: string;
+  title: string;
+  code?: string | null;
+  default_amount?: number | null;
+};
 
 export default function ApplyPenaltyPage() {
   const [staff, setStaff] = useState<StaffRow[]>([]);
@@ -44,7 +50,14 @@ export default function ApplyPenaltyPage() {
     void fetch("/api/staff")
       .then((r) => r.json())
       .then((staffJson) => {
-        setStaff(staffJson.data ?? []);
+        const list = (staffJson.data ?? []) as Record<string, unknown>[];
+        setStaff(
+          list.map((r) => ({
+            id: String(r.id),
+            full_name: String(r.full_name ?? ""),
+            employee_code: String(r.employee_code ?? "")
+          }))
+        );
       });
   }, []);
 
@@ -177,21 +190,13 @@ export default function ApplyPenaltyPage() {
           <form id="apply-penalty-form" className="space-y-4" onSubmit={onSubmit}>
             <div className="space-y-2">
               <Label htmlFor="staff">Staff</Label>
-              <Select value={staffId} onValueChange={setStaffId} required>
-                <SelectTrigger id="staff">
-                  <SelectValue placeholder="Search by selecting…" />
-                </SelectTrigger>
-                <SelectContent className="max-h-72">
-                  {staff.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>
-                      <span className="font-medium">{s.full_name}</span>
-                      <span className="ml-2 text-xs text-muted-foreground">
-                        {s.employee_code}
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <StaffSearchCombobox
+                id="staff"
+                staff={staff}
+                value={staffId}
+                onValueChange={setStaffId}
+                placeholder="Type to search, then select…"
+              />
             </div>
 
             <div className="space-y-2">
@@ -214,7 +219,17 @@ export default function ApplyPenaltyPage() {
                 <SelectContent>
                   {defs.map((d) => (
                     <SelectItem key={d.id} value={d.id}>
-                      {d.title}
+                      {d.code ? (
+                        <>
+                          <span className="font-mono">{d.code}</span>
+                          <span className="text-muted-foreground">
+                            {" "}
+                            — {d.title}
+                          </span>
+                        </>
+                      ) : (
+                        d.title
+                      )}
                     </SelectItem>
                   ))}
                 </SelectContent>

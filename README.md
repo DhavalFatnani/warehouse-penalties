@@ -102,7 +102,7 @@ This almost always means the **port does not match the running dev server** (e.g
 - `/dashboard/settlement` — cycle summary & bulk settle
 - `/dashboard/staff` — staff directory
 - `/dashboard/staff/:id` — edit staff
-- `/dashboard/penalties` — penalty definitions
+- `/dashboard/penalties` — penalty codes catalog + warehouse-scoped definitions
 - `/dashboard/imports` — bulk staff import
 - `/dashboard/admin/users` (admin)
 - `/dashboard/admin/access` (admin)
@@ -115,7 +115,8 @@ This almost always means the **port does not match the running dev server** (e.g
 - `GET/POST /api/staff`
 - `GET/PATCH /api/staff/:id`
 - `GET /api/staff-types`
-- `GET/POST /api/penalty-definitions`
+- `GET/POST /api/penalty-codes` (catalog; query `for_definition_warehouse=global|<uuid>`, `warehouse_id`)
+- `GET/POST /api/penalty-definitions` (query `staff_id`, `warehouse_id`, `globals_only=1`)
 - `PATCH /api/penalty-definitions/:id`
 - `GET/POST /api/penalty-records`
 - `PATCH /api/penalty-records/:id/status` (settle one)

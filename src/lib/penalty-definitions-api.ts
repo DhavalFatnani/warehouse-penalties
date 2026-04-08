@@ -3,6 +3,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 export const PENALTY_DEFINITION_SELECT = `
   *,
+  penalty_codes ( id, code, warehouse_id ),
+  warehouses ( id, code, name ),
   penalty_definition_staff_types (
     staff_type_id,
     staff_types ( id, code, display_name )
@@ -20,9 +22,25 @@ export function normalizePenaltyDefinition(row: PenaltyDefinitionRow) {
   const staff_types = links
     .map((l) => l.staff_types)
     .filter((s): s is { id: string; code: string; display_name: string } => s != null);
-  const { penalty_definition_staff_types: _p, ...rest } = row;
+  const pc = row.penalty_codes as
+    | { id?: string; code?: string; warehouse_id?: string | null }
+    | null
+    | undefined;
+  const wh = row.warehouses as
+    | { id?: string; code?: string; name?: string }
+    | null
+    | undefined;
+  const {
+    penalty_definition_staff_types: _p,
+    penalty_codes: _pc,
+    warehouses: _wh,
+    ...rest
+  } = row;
   return {
     ...rest,
+    code: pc?.code ?? null,
+    penalty_code: pc ?? null,
+    warehouse: wh ?? null,
     staff_type_ids,
     staff_types
   };

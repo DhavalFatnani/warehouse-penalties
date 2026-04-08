@@ -32,7 +32,9 @@ import {
   TableHeader,
   TableRow
 } from "@/components/ui/table";
-import { ChevronDown, Download } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Separator } from "@/components/ui/separator";
+import { CalendarRange, ChevronDown, Download, Layers, ListFilter } from "lucide-react";
 
 type Row = Record<string, unknown>;
 
@@ -74,6 +76,10 @@ export default function SettlementPage() {
   const [groupBy, setGroupBy] = useState<"staff" | "staff_type" | "warehouse">(
     "staff"
   );
+  const [statusFilter, setStatusFilter] = useState<
+    "created" | "settled" | "all"
+  >("created");
+  const [allTime, setAllTime] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [groups, setGroups] = useState<PreviewGroup[]>([]);
@@ -104,10 +110,15 @@ export default function SettlementPage() {
     setLoading(true);
     try {
       const p = new URLSearchParams({
-        incident_date_from: from,
-        incident_date_to: to,
-        group_by: groupBy
+        group_by: groupBy,
+        status: statusFilter
       });
+      if (!allTime) {
+        p.set("incident_date_from", from);
+        p.set("incident_date_to", to);
+      } else {
+        p.set("all_time", "1");
+      }
       if (warehouseId) p.set("warehouse_id", warehouseId);
       if (staffId) p.set("staff_id", staffId);
       if (staffTypeId) p.set("staff_type_id", staffTypeId);
@@ -122,13 +133,26 @@ export default function SettlementPage() {
     } finally {
       setLoading(false);
     }
-  }, [from, to, warehouseId, staffId, staffTypeId, groupBy]);
+  }, [
+    from,
+    to,
+    allTime,
+    statusFilter,
+    warehouseId,
+    staffId,
+    staffTypeId,
+    groupBy
+  ]);
 
   useEffect(() => {
     void loadPreview();
   }, [loadPreview]);
 
   async function settleAll() {
+    if (statusFilter !== "created") {
+      toast.message("Switch to “Pending settlement” to mark records as settled");
+      return;
+    }
     if (!recordIds.length) {
       toast.message("Nothing to settle in this range");
       return;
@@ -159,9 +183,12 @@ export default function SettlementPage() {
         "employee_code",
         "staff_type",
         "warehouse",
+        "penalty_code",
         "penalty",
+        "status",
         "amount",
-        "date",
+        "incident_date",
+        "settled_at",
         "id"
       ].join(",")
     ];
@@ -174,19 +201,31 @@ export default function SettlementPage() {
             JSON.stringify(String(r.employee_code ?? "")),
             JSON.stringify(String(r.staff_type_name ?? "")),
             JSON.stringify(String(r.warehouse_name ?? "")),
+            JSON.stringify(String(r.penalty_code ?? "")),
             JSON.stringify(String(r.penalty_title ?? "")),
+            JSON.stringify(String(r.status ?? "")),
             String(r.computed_amount ?? ""),
             String(r.incident_date ?? ""),
+            JSON.stringify(String(r.settled_at ?? "")),
             String(r.id ?? "")
           ].join(",")
         );
       }
     }
-    const blob = new Blob([lines.join("\n")], { type: "text/csv" });
+    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
     const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `settlement-${from}-${to}.csv`;
+    const url = URL.createObjectURL(blob);
+    a.href = url;
+    const datePart = allTime ? "all-time" : `${from}_${to}`;
+    const statusPart =
+      statusFilter === "created"
+        ? "pending"
+        : statusFilter === "settled"
+          ? "settled"
+          : "all-status";
+    a.download = `settlement-${statusPart}-${datePart}.csv`;
     a.click();
+    URL.revokeObjectURL(url);
   }
 
   const groupSectionTitle =
@@ -201,132 +240,245 @@ export default function SettlementPage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Settlement</h1>
         <p className="text-sm text-muted-foreground">
-          Open penalties (<span className="font-medium">created</span>) in the
-          date range, grouped for payroll. Marking settled excludes them from
-          the next cycle.
+          Preview penalties by <span className="font-medium">status</span> and
+          incident date (or all time), grouped for payroll.{" "}
+          <span className="font-medium">Export CSV</span> matches the current
+          filters. Pending-only rows can be marked settled in bulk.
         </p>
       </div>
 
-      <Card>
-        <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <CardTitle className="text-base">Cycle window & filters</CardTitle>
-            <CardDescription>
-              Incident date in range, optional warehouse / staff / staff type
-            </CardDescription>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <div className="space-y-1">
-              <Label>From</Label>
-              <Input
-                type="date"
-                value={from}
-                onChange={(e) => setFrom(e.target.value)}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label>To</Label>
-              <Input
-                type="date"
-                value={to}
-                onChange={(e) => setTo(e.target.value)}
-              />
-            </div>
-            <Button variant="secondary" onClick={() => void loadPreview()}>
-              Refresh
-            </Button>
-          </div>
+      <Card className="overflow-hidden">
+        <CardHeader className="border-b bg-muted/40 pb-4">
+          <CardTitle className="text-base">Settlement filters</CardTitle>
+          <CardDescription className="max-w-2xl">
+            Tune the preview and CSV export (same query, up to 5,000 rows).
+            Bulk settle is only available for pending records.
+          </CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="space-y-1">
-              <Label>Warehouse</Label>
-              <Select
-                value={warehouseId || "all"}
-                onValueChange={(v) => setWarehouseId(v === "all" ? "" : v)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="All warehouses" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All warehouses</SelectItem>
-                  {warehouses.map((w) => (
-                    <SelectItem key={w.id} value={w.id}>
-                      {w.code} — {w.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+        <CardContent className="space-y-0 p-0">
+          {/* Time range */}
+          <div className="space-y-4 p-5 sm:p-6">
+            <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+              <CalendarRange className="h-4 w-4 text-muted-foreground" aria-hidden />
+              Incident date
             </div>
-            <div className="space-y-1">
-              <Label>Staff type</Label>
-              <Select
-                value={staffTypeId || "all"}
-                onValueChange={(v) => setStaffTypeId(v === "all" ? "" : v)}
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch lg:justify-between">
+              <div className="grid grid-cols-2 gap-3 sm:max-w-md">
+                <div className="space-y-1.5">
+                  <Label htmlFor="settle-from" className="text-xs text-muted-foreground">
+                    From
+                  </Label>
+                  <Input
+                    id="settle-from"
+                    type="date"
+                    value={from}
+                    disabled={allTime}
+                    onChange={(e) => setFrom(e.target.value)}
+                    className="bg-background"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="settle-to" className="text-xs text-muted-foreground">
+                    To
+                  </Label>
+                  <Input
+                    id="settle-to"
+                    type="date"
+                    value={to}
+                    disabled={allTime}
+                    onChange={(e) => setTo(e.target.value)}
+                    className="bg-background"
+                  />
+                </div>
+              </div>
+              <div
+                className={`flex flex-1 items-center rounded-lg border px-4 py-3 lg:max-w-sm ${
+                  allTime
+                    ? "border-primary/30 bg-primary/5"
+                    : "border-border bg-muted/30"
+                }`}
               >
-                <SelectTrigger>
-                  <SelectValue placeholder="All types" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All types</SelectItem>
-                  {staffTypes.map((t) => (
-                    <SelectItem key={t.id} value={t.id}>
-                      {t.display_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <Label>Staff</Label>
-              <Select
-                value={staffId || "all"}
-                onValueChange={(v) => setStaffId(v === "all" ? "" : v)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="All staff" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All staff</SelectItem>
-                  {staffList.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>
-                      {s.full_name}
-                      {s.employee_code ? ` (${s.employee_code})` : ""}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <Label>Group by</Label>
-              <Select
-                value={groupBy}
-                onValueChange={(v) =>
-                  setGroupBy(v as "staff" | "staff_type" | "warehouse")
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="staff">Staff</SelectItem>
-                  <SelectItem value="staff_type">Staff type</SelectItem>
-                  <SelectItem value="warehouse">Warehouse</SelectItem>
-                </SelectContent>
-              </Select>
+                <div className="flex items-start gap-3">
+                  <Checkbox
+                    id="all-time"
+                    checked={allTime}
+                    onCheckedChange={(c) => setAllTime(c === true)}
+                    className="mt-0.5"
+                  />
+                  <div className="space-y-0.5">
+                    <Label htmlFor="all-time" className="cursor-pointer font-medium leading-none">
+                      All time
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Ignore From / To and include every incident date.
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
-          <div className="flex flex-wrap gap-2">
+
+          <Separator />
+
+          {/* Scope */}
+          <div className="space-y-4 p-5 sm:p-6">
+            <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+              <ListFilter className="h-4 w-4 text-muted-foreground" aria-hidden />
+              Record scope
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Status</Label>
+                <Select
+                  value={statusFilter}
+                  onValueChange={(v) =>
+                    setStatusFilter(v as "created" | "settled" | "all")
+                  }
+                >
+                  <SelectTrigger className="bg-background">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="created">Pending settlement</SelectItem>
+                    <SelectItem value="settled">Settled</SelectItem>
+                    <SelectItem value="all">All statuses</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Warehouse</Label>
+                <Select
+                  value={warehouseId || "all"}
+                  onValueChange={(v) => setWarehouseId(v === "all" ? "" : v)}
+                >
+                  <SelectTrigger className="bg-background">
+                    <SelectValue placeholder="All warehouses" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All warehouses</SelectItem>
+                    {warehouses.map((w) => (
+                      <SelectItem key={w.id} value={w.id}>
+                        {w.code} — {w.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Staff type</Label>
+                <Select
+                  value={staffTypeId || "all"}
+                  onValueChange={(v) => setStaffTypeId(v === "all" ? "" : v)}
+                >
+                  <SelectTrigger className="bg-background">
+                    <SelectValue placeholder="All types" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All types</SelectItem>
+                    {staffTypes.map((t) => (
+                      <SelectItem key={t.id} value={t.id}>
+                        {t.display_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Staff</Label>
+                <Select
+                  value={staffId || "all"}
+                  onValueChange={(v) => setStaffId(v === "all" ? "" : v)}
+                >
+                  <SelectTrigger className="bg-background">
+                    <SelectValue placeholder="All staff" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All staff</SelectItem>
+                    {staffList.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>
+                        {s.full_name}
+                        {s.employee_code ? ` (${s.employee_code})` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* Grouping */}
+          <div className="space-y-4 p-5 sm:px-6 sm:pb-6 sm:pt-4">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                  <Layers className="h-4 w-4 text-muted-foreground" aria-hidden />
+                  Preview grouping
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  How rows are rolled up in the list below.
+                </p>
+              </div>
+              <div className="w-full space-y-1.5 sm:w-56">
+                <Label className="text-xs text-muted-foreground">Group by</Label>
+                <Select
+                  value={groupBy}
+                  onValueChange={(v) =>
+                    setGroupBy(v as "staff" | "staff_type" | "warehouse")
+                  }
+                >
+                  <SelectTrigger className="bg-background">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="staff">Staff</SelectItem>
+                    <SelectItem value="staff_type">Staff type</SelectItem>
+                    <SelectItem value="warehouse">Warehouse</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* Actions */}
+          <div className="flex flex-col gap-3 bg-muted/20 p-5 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-4">
             <Button
-              onClick={() => void settleAll()}
-              disabled={loading || !recordIds.length}
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={loading}
+              onClick={() => void loadPreview()}
+              className="w-full sm:w-auto"
             >
-              Mark all as settled
+              {loading ? "Loading…" : "Refresh preview"}
             </Button>
-            <Button variant="outline" size="sm" onClick={downloadCsv}>
-              <Download className="mr-2 h-4 w-4" />
-              Export CSV
-            </Button>
+            <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <Button
+                type="button"
+                onClick={() => void settleAll()}
+                disabled={
+                  loading ||
+                  !recordIds.length ||
+                  statusFilter !== "created"
+                }
+                className="w-full sm:w-auto"
+              >
+                Mark all as settled
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                size="default"
+                className="w-full sm:w-auto"
+                onClick={downloadCsv}
+              >
+                <Download className="mr-2 h-4 w-4" />
+                Export CSV
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -347,7 +499,7 @@ export default function SettlementPage() {
         <CardContent className="space-y-2">
           {groups.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              No open penalties in range.
+              No penalties match these filters.
             </p>
           ) : (
             groups.map((g) => (

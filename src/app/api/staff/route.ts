@@ -12,11 +12,25 @@ export async function GET(req: NextRequest) {
   try {
     const { appUser } = await requireRole(["manager", "admin"]);
     const search = req.nextUrl.searchParams.get("search");
-    const isActive = req.nextUrl.searchParams.get("is_active");
+    const rawActive = req.nextUrl.searchParams.get("is_active");
+    const includeInactive =
+      req.nextUrl.searchParams.get("include_inactive") === "true";
 
     let query = adminClient
       .from("staff")
-      .select("id, employee_code, full_name, is_active, warehouse_id, staff_type_id")
+      .select(
+        `
+        id,
+        employee_code,
+        full_name,
+        phone,
+        is_active,
+        warehouse_id,
+        staff_type_id,
+        warehouses ( code, name ),
+        staff_types ( code, display_name )
+      `
+      )
       .order("created_at", { ascending: false });
 
     if (appUser.role !== "admin") {
@@ -28,9 +42,11 @@ export async function GET(req: NextRequest) {
     }
 
     if (search) query = query.ilike("full_name", `%${search}%`);
-    if (isActive) query = query.eq("is_active", isActive === "true");
+    if (rawActive === "true") query = query.eq("is_active", true);
+    else if (rawActive === "false") query = query.eq("is_active", false);
+    else if (!includeInactive) query = query.eq("is_active", true);
 
-    const { data, error } = await query.limit(200);
+    const { data, error } = await query.limit(500);
     if (error) throw new Error(error.message);
     return jsonOk(data ?? []);
   } catch (e) {

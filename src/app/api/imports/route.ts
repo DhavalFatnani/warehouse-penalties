@@ -97,15 +97,11 @@ export async function PUT(req: NextRequest) {
     if (stErr) throw new Error(stErr.message);
     const typeSet = new Set((staffTypes ?? []).map((t) => t.code.toUpperCase()));
 
-    const defaultType = (
-      parsed.data.default_staff_type_code ?? "PP"
-    ).toUpperCase();
-
     const pRows = csvParsed.data.map((row, i) => {
       const employee_code = row.employee_code?.trim();
       const full_name = row.full_name?.trim();
-      const rawType = row.staff_type_code?.trim();
-      const typeCode = (rawType || defaultType).toUpperCase();
+      const rawType = row.staff_type_code?.trim() ?? "";
+      const typeCode = rawType ? rawType.toUpperCase() : "";
 
       const fieldErrors: { field: string; message: string }[] = [];
       if (!employee_code) {
@@ -114,7 +110,9 @@ export async function PUT(req: NextRequest) {
       if (!full_name) {
         fieldErrors.push({ field: "full_name", message: "Required" });
       }
-      if (!typeSet.has(typeCode)) {
+      if (!rawType) {
+        fieldErrors.push({ field: "staff_type_code", message: "Required" });
+      } else if (!typeSet.has(typeCode)) {
         fieldErrors.push({
           field: "staff_type_code",
           message: `Unknown staff type: ${typeCode}`
@@ -124,7 +122,7 @@ export async function PUT(req: NextRequest) {
       const validation_status = fieldErrors.length === 0 ? "valid" : "invalid";
       return {
         row_number: i + 1,
-        raw: { ...row, staff_type_code: rawType || defaultType },
+        raw: { ...row, staff_type_code: rawType },
         validation_status,
         validation_errors:
           fieldErrors.length === 0
@@ -138,8 +136,7 @@ export async function PUT(req: NextRequest) {
       {
         p_batch_id: parsed.data.batch_id,
         p_warehouse_id: parsed.data.warehouse_id,
-        p_rows: pRows,
-        p_default_staff_type: defaultType
+        p_rows: pRows
       }
     );
 

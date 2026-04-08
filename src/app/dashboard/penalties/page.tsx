@@ -25,40 +25,92 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from "@/components/ui/select";
 
 type StaffTypeRow = { id: string; code: string; display_name: string };
+type WarehouseRow = { id: string; code: string; name: string };
+type PenaltyCodeRow = {
+  id: string;
+  code: string;
+  warehouse_id: string | null;
+  is_active: boolean;
+};
 type Def = {
   id: string;
-  code?: string;
+  code?: string | null;
   title?: string;
-  category?: string | null;
   default_amount?: number | null;
   structure_model?: string;
+  warehouse?: { id: string; code: string; name: string } | null;
   staff_types?: { id: string; code: string; display_name: string }[];
 };
 
 export default function PenaltyDefinitionsPage() {
   const [rows, setRows] = useState<Def[]>([]);
   const [staffTypes, setStaffTypes] = useState<StaffTypeRow[]>([]);
+  const [warehouses, setWarehouses] = useState<WarehouseRow[]>([]);
+  const [catalogCodes, setCatalogCodes] = useState<PenaltyCodeRow[]>([]);
+  const [codesForDef, setCodesForDef] = useState<PenaltyCodeRow[]>([]);
   const [staffTypeIds, setStaffTypeIds] = useState<string[]>([]);
   const [open, setOpen] = useState(false);
+  const [codeOpen, setCodeOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [codeLoading, setCodeLoading] = useState(false);
+  /** "" = all visible; GLOBAL_ONLY = definitions with null warehouse_id; else warehouse uuid */
+  const [listFilterWh, setListFilterWh] = useState<"" | "GLOBAL_ONLY" | string>(
+    ""
+  );
+  const [defWarehouseScope, setDefWarehouseScope] = useState<string>("");
+  const [penaltyCodeId, setPenaltyCodeId] = useState<string>("");
   const [form, setForm] = useState({
-    code: "",
     title: "",
     description: "",
-    category: "",
     default_amount: ""
   });
+  const [newCode, setNewCode] = useState({
+    code: "",
+    warehouse_scope: "" as "" | "global" | string
+  });
 
-  async function load() {
-    const res = await fetch("/api/penalty-definitions");
+  async function loadDefinitions() {
+    let q = "";
+    if (listFilterWh === "GLOBAL_ONLY") q = "?globals_only=1";
+    else if (listFilterWh !== "") {
+      q = `?warehouse_id=${encodeURIComponent(listFilterWh)}`;
+    }
+    const res = await fetch(`/api/penalty-definitions${q}`);
     const json = await res.json();
     setRows((json.data ?? []) as Def[]);
   }
 
+  async function loadCatalogCodes() {
+    const res = await fetch("/api/penalty-codes?include_inactive=true");
+    const json = await res.json();
+    if (res.ok) {
+      const list = (json.data ?? []) as Record<string, unknown>[];
+      setCatalogCodes(
+        list.map((r) => ({
+          id: String(r.id),
+          code: String(r.code ?? ""),
+          warehouse_id:
+            r.warehouse_id != null ? String(r.warehouse_id) : null,
+          is_active: r.is_active !== false
+        }))
+      );
+    }
+  }
+
   useEffect(() => {
-    void load();
+    void loadDefinitions();
+  }, [listFilterWh]);
+
+  useEffect(() => {
     void fetch("/api/staff-types")
       .then((r) => r.json())
       .then((json) => {
@@ -66,7 +118,42 @@ export default function PenaltyDefinitionsPage() {
         setStaffTypes(list);
         setStaffTypeIds(list.map((s) => s.id));
       });
+    void fetch("/api/warehouses")
+      .then((r) => r.json())
+      .then((json) => {
+        setWarehouses((json.data ?? []) as WarehouseRow[]);
+      });
+    void loadCatalogCodes();
   }, []);
+
+  useEffect(() => {
+    if (!defWarehouseScope) {
+      setCodesForDef([]);
+      setPenaltyCodeId("");
+      return;
+    }
+    const param =
+      defWarehouseScope === "global"
+        ? "global"
+        : defWarehouseScope;
+    let cancelled = false;
+    void fetch(
+      `/api/penalty-codes?for_definition_warehouse=${encodeURIComponent(param)}`
+    )
+      .then((r) => r.json())
+      .then((json) => {
+        if (cancelled) return;
+        setCodesForDef((json.data ?? []) as PenaltyCodeRow[]);
+        setPenaltyCodeId((prev) =>
+          (json.data ?? []).some((c: PenaltyCodeRow) => c.id === prev)
+            ? prev
+            : ""
+        );
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [defWarehouseScope]);
 
   function toggleStaffType(id: string, checked: boolean) {
     setStaffTypeIds((prev) => {
@@ -79,23 +166,46 @@ export default function PenaltyDefinitionsPage() {
     setStaffTypeIds(staffTypes.map((s) => s.id));
   }
 
-  async function onSubmit(e: FormEvent) {
+  function resetDefDialog() {
+    setDefWarehouseScope("");
+    setPenaltyCodeId("");
+    setForm({
+      title: "",
+      description: "",
+      default_amount: ""
+    });
+    resetStaffTypesToAll();
+  }
+
+  async function onSubmitDefinition(e: FormEvent) {
     e.preventDefault();
     setLoading(true);
     try {
       const defaultAmount = form.default_amount
         ? Number(form.default_amount)
         : null;
+      if (!defWarehouseScope) {
+        toast.error("Select definition scope (warehouse or global)");
+        setLoading(false);
+        return;
+      }
+      if (!penaltyCodeId) {
+        toast.error("Select a penalty code from the catalog");
+        setLoading(false);
+        return;
+      }
       if (staffTypeIds.length === 0) {
         toast.error("Select at least one staff type");
         setLoading(false);
         return;
       }
+      const warehouse_id =
+        defWarehouseScope === "global" ? null : defWarehouseScope;
       const body = {
-        code: form.code.trim().toUpperCase(),
+        penalty_code_id: penaltyCodeId,
+        warehouse_id,
         title: form.title.trim(),
         description: form.description.trim() || null,
-        category: form.category.trim() || null,
         default_amount: defaultAmount,
         structure_model: "fixed_per_occurrence",
         occurrence_scope: "all_time",
@@ -112,15 +222,8 @@ export default function PenaltyDefinitionsPage() {
       if (!res.ok) throw new Error(json.error?.message ?? "Failed");
       toast.success("Definition created");
       setOpen(false);
-      setForm({
-        code: "",
-        title: "",
-        description: "",
-        category: "",
-        default_amount: ""
-      });
-      resetStaffTypesToAll();
-      await load();
+      resetDefDialog();
+      await loadDefinitions();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Error");
     } finally {
@@ -128,49 +231,359 @@ export default function PenaltyDefinitionsPage() {
     }
   }
 
+  async function onSubmitCode(e: FormEvent) {
+    e.preventDefault();
+    if (!newCode.code.trim()) {
+      toast.error("Enter a code");
+      return;
+    }
+    if (!newCode.warehouse_scope) {
+      toast.error("Select whether the code is global or warehouse-specific");
+      return;
+    }
+    setCodeLoading(true);
+    try {
+      const warehouse_id =
+        newCode.warehouse_scope === "global"
+          ? null
+          : newCode.warehouse_scope;
+      const res = await fetch("/api/penalty-codes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          code: newCode.code.trim(),
+          warehouse_id
+        })
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error?.message ?? "Failed");
+      toast.success("Penalty code created");
+      setCodeOpen(false);
+      setNewCode({ code: "", warehouse_scope: "" });
+      await loadCatalogCodes();
+      if (defWarehouseScope) {
+        const param =
+          defWarehouseScope === "global" ? "global" : defWarehouseScope;
+        const r = await fetch(
+          `/api/penalty-codes?for_definition_warehouse=${encodeURIComponent(param)}`
+        );
+        const j = await r.json();
+        if (r.ok) setCodesForDef((j.data ?? []) as PenaltyCodeRow[]);
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Error");
+    } finally {
+      setCodeLoading(false);
+    }
+  }
+
+  function warehouseLabel(id: string | null) {
+    if (id == null) return "All sites";
+    const w = warehouses.find((x) => x.id === id);
+    return w ? `${w.code} — ${w.name}` : id;
+  }
+
+  async function setCodeActive(id: string, is_active: boolean) {
+    const res = await fetch(`/api/penalty-codes/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ is_active })
+    });
+    const json = await res.json();
+    if (!res.ok) {
+      throw new Error(json.error?.message ?? "Failed");
+    }
+    await loadCatalogCodes();
+    if (defWarehouseScope) {
+      const param =
+        defWarehouseScope === "global" ? "global" : defWarehouseScope;
+      const r = await fetch(
+        `/api/penalty-codes?for_definition_warehouse=${encodeURIComponent(param)}`
+      );
+      const j = await r.json();
+      if (r.ok) setCodesForDef((j.data ?? []) as PenaltyCodeRow[]);
+    }
+  }
+
+  async function onRemoveCode(c: PenaltyCodeRow) {
+    if (
+      !confirm(
+        `Remove "${c.code}" from the catalog? Existing penalties and definitions keep using it; it will not be offered for new definitions.`
+      )
+    ) {
+      return;
+    }
+    try {
+      await setCodeActive(c.id, false);
+      toast.success("Code removed from new definitions");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Error");
+    }
+  }
+
+  async function onRestoreCode(c: PenaltyCodeRow) {
+    try {
+      await setCodeActive(c.id, true);
+      toast.success("Code restored");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Error");
+    }
+  }
+
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            Penalty definitions
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Reusable penalty types with default amounts. Advanced structure models
-            remain available in the database.
-          </p>
+    <div className="mx-auto max-w-5xl space-y-8">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">
+          Penalty definitions
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          Create <strong>penalty codes</strong> first, then attach definitions
+          (title, amount, staff types) per warehouse or globally.
+        </p>
+      </div>
+
+      <div className="flex flex-col gap-3 rounded-lg border p-4">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-lg font-medium">Penalty codes</h2>
+            <p className="text-xs text-muted-foreground">
+              Short identifiers (e.g. LATE). Global codes work everywhere;
+              warehouse codes only for that site&apos;s definitions. Removing a
+              code hides it from new definitions only — history is unchanged.
+            </p>
+          </div>
+          <Dialog
+            open={codeOpen}
+            onOpenChange={(v) => {
+              setCodeOpen(v);
+              if (!v) setNewCode({ code: "", warehouse_scope: "" });
+            }}
+          >
+            <DialogTrigger asChild>
+              <Button type="button" variant="secondary" size="sm">
+                New code
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-md">
+              <form onSubmit={onSubmitCode}>
+                <DialogHeader>
+                  <DialogTitle>Add penalty code</DialogTitle>
+                  <DialogDescription>
+                    Codes are reused when you create definitions.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-3 py-4">
+                  <div className="space-y-2">
+                    <Label>Scope</Label>
+                    <Select
+                      value={newCode.warehouse_scope || undefined}
+                      onValueChange={(v) =>
+                        setNewCode((s) => ({ ...s, warehouse_scope: v }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Choose scope" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="global">Global (all warehouses)</SelectItem>
+                        {warehouses.map((w) => (
+                          <SelectItem key={w.id} value={w.id}>
+                            {w.code} — {w.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="ncode">Code</Label>
+                    <Input
+                      id="ncode"
+                      value={newCode.code}
+                      onChange={(e) =>
+                        setNewCode((s) => ({
+                          ...s,
+                          code: e.target.value.toUpperCase()
+                        }))
+                      }
+                      placeholder="LATE"
+                      required
+                    />
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button type="submit" disabled={codeLoading}>
+                    {codeLoading ? "Saving…" : "Create code"}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </div>
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Code</TableHead>
+                <TableHead>Scope</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {catalogCodes.length === 0 ? (
+                <TableRow>
+                  <TableCell
+                    colSpan={4}
+                    className="text-center text-sm text-muted-foreground"
+                  >
+                    No codes yet. Add one to use in definitions.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                catalogCodes.map((c) => (
+                  <TableRow key={c.id}>
+                    <TableCell className="font-mono text-sm">{c.code}</TableCell>
+                    <TableCell className="text-muted-foreground text-sm">
+                      {warehouseLabel(c.warehouse_id)}
+                    </TableCell>
+                    <TableCell>
+                      {c.is_active ? (
+                        <Badge variant="secondary">Active</Badge>
+                      ) : (
+                        <Badge variant="outline">Removed</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {c.is_active ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="text-destructive hover:text-destructive"
+                          onClick={() => void onRemoveCode(c)}
+                        >
+                          Remove
+                        </Button>
+                      ) : (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => void onRestoreCode(c)}
+                        >
+                          Restore
+                        </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="space-y-2">
+          <Label className="text-xs text-muted-foreground">Filter definitions</Label>
+          <Select
+            value={
+              listFilterWh === ""
+                ? "all"
+                : listFilterWh === "GLOBAL_ONLY"
+                  ? "global_only"
+                  : listFilterWh
+            }
+            onValueChange={(v) => {
+              if (v === "all") setListFilterWh("");
+              else if (v === "global_only") setListFilterWh("GLOBAL_ONLY");
+              else setListFilterWh(v);
+            }}
+          >
+            <SelectTrigger className="w-[min(100%,280px)]">
+              <SelectValue placeholder="All visible" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All (global + my warehouses)</SelectItem>
+              <SelectItem value="global_only">Global definitions only</SelectItem>
+              {warehouses.map((w) => (
+                <SelectItem key={w.id} value={w.id}>
+                  {w.code} — {w.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
         <Dialog
           open={open}
           onOpenChange={(v) => {
             setOpen(v);
             if (v && staffTypes.length > 0) resetStaffTypesToAll();
+            if (!v) resetDefDialog();
           }}
         >
           <DialogTrigger asChild>
             <Button>New definition</Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-md">
-            <form onSubmit={onSubmit}>
+          <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md">
+            <form onSubmit={onSubmitDefinition}>
               <DialogHeader>
                 <DialogTitle>Create penalty type</DialogTitle>
                 <DialogDescription>
-                  Fixed amount per occurrence for the common case.
+                  Pick scope, then a catalog code, then details.
                 </DialogDescription>
               </DialogHeader>
               <div className="grid gap-3 py-4">
                 <div className="space-y-2">
-                  <Label htmlFor="code">Code</Label>
-                  <Input
-                    id="code"
-                    value={form.code}
-                    onChange={(e) =>
-                      setForm({ ...form, code: e.target.value.toUpperCase() })
-                    }
-                    placeholder="LATE"
-                    required
-                    minLength={2}
-                  />
+                  <Label>Definition scope</Label>
+                  <Select
+                    value={defWarehouseScope || undefined}
+                    onValueChange={(v) => {
+                      setDefWarehouseScope(v);
+                      setPenaltyCodeId("");
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Where does this apply?" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="global">
+                        Global (all warehouses)
+                      </SelectItem>
+                      {warehouses.map((w) => (
+                        <SelectItem key={w.id} value={w.id}>
+                          {w.code} — {w.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Penalty code</Label>
+                  <Select
+                    value={penaltyCodeId || undefined}
+                    onValueChange={setPenaltyCodeId}
+                    disabled={!defWarehouseScope || codesForDef.length === 0}
+                  >
+                    <SelectTrigger>
+                      <SelectValue
+                        placeholder={
+                          !defWarehouseScope
+                            ? "Choose scope first"
+                            : codesForDef.length === 0
+                              ? "No codes — add one above"
+                              : "Select code"
+                        }
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {codesForDef.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          <span className="font-mono">{c.code}</span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="title">Name</Label>
@@ -182,17 +595,6 @@ export default function PenaltyDefinitionsPage() {
                     }
                     placeholder="Late arrival"
                     required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="cat">Category (optional)</Label>
-                  <Input
-                    id="cat"
-                    value={form.category}
-                    onChange={(e) =>
-                      setForm({ ...form, category: e.target.value })
-                    }
-                    placeholder="Attendance"
                   />
                 </div>
                 <div className="space-y-2">
@@ -254,7 +656,7 @@ export default function PenaltyDefinitionsPage() {
               </div>
               <DialogFooter>
                 <Button type="submit" disabled={loading}>
-                  Create
+                  {loading ? "Creating…" : "Create"}
                 </Button>
               </DialogFooter>
             </form>
@@ -268,41 +670,60 @@ export default function PenaltyDefinitionsPage() {
             <TableRow>
               <TableHead>Code</TableHead>
               <TableHead>Name</TableHead>
-              <TableHead>Category</TableHead>
+              <TableHead>Warehouse</TableHead>
               <TableHead className="text-right">Default</TableHead>
               <TableHead>Applies to</TableHead>
               <TableHead>Model</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {rows.map((r) => (
-              <TableRow key={String(r.id)}>
-                <TableCell className="font-mono text-sm">
-                  {String(r.code ?? "")}
-                </TableCell>
-                <TableCell className="font-medium">{String(r.title ?? "")}</TableCell>
-                <TableCell>
-                  <Badge variant="outline">{String(r.category ?? "")}</Badge>
-                </TableCell>
-                <TableCell className="text-right tabular-nums">
-                  {r.default_amount != null
-                    ? String(r.default_amount)
-                    : "—"}
-                </TableCell>
-                <TableCell>
-                  <div className="flex flex-wrap gap-1">
-                    {(r.staff_types ?? []).map((st) => (
-                      <Badge key={st.id} variant="secondary" className="font-normal">
-                        {st.code}
-                      </Badge>
-                    ))}
-                  </div>
-                </TableCell>
-                <TableCell className="text-muted-foreground text-sm">
-                  {String(r.structure_model ?? "")}
+            {rows.length === 0 ? (
+              <TableRow>
+                <TableCell
+                  colSpan={6}
+                  className="py-10 text-center text-muted-foreground"
+                >
+                  No definitions match this filter.
                 </TableCell>
               </TableRow>
-            ))}
+            ) : (
+              rows.map((r) => (
+                <TableRow key={String(r.id)}>
+                  <TableCell className="font-mono text-sm">
+                    {String(r.code ?? "")}
+                  </TableCell>
+                  <TableCell className="font-medium">
+                    {String(r.title ?? "")}
+                  </TableCell>
+                  <TableCell className="text-sm text-muted-foreground">
+                    {r.warehouse
+                      ? `${r.warehouse.code} — ${r.warehouse.name}`
+                      : "Global"}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {r.default_amount != null
+                      ? String(r.default_amount)
+                      : "—"}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-wrap gap-1">
+                      {(r.staff_types ?? []).map((st) => (
+                        <Badge
+                          key={st.id}
+                          variant="secondary"
+                          className="font-normal"
+                        >
+                          {st.code}
+                        </Badge>
+                      ))}
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground text-sm">
+                    {String(r.structure_model ?? "")}
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
           </TableBody>
         </Table>
       </div>

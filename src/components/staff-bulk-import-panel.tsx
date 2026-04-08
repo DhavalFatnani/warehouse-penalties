@@ -75,10 +75,9 @@ export function StaffBulkImportPanel({
   const [rows, setRows] = useState<Batch[]>([]);
   const [fileName, setFileName] = useState("staff-upload.csv");
   const [csv, setCsv] = useState(
-    "employee_code,full_name,staff_type_code\nEMP-NEW-001,Test User,PP"
+    "employee_code,full_name,staff_type_code,phone\nEMP-NEW-001,Test User,PP,+15551234567"
   );
   const [warehouseId, setWarehouseId] = useState("");
-  const [defaultStaffType, setDefaultStaffType] = useState("PP");
   const [lastSummary, setLastSummary] = useState<Record<
     string,
     unknown
@@ -88,6 +87,7 @@ export function StaffBulkImportPanel({
   const [rowDetailBatch, setRowDetailBatch] = useState<string | null>(null);
   const [rowDetails, setRowDetails] = useState<ImportRow[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const staffTypes = staffRefs?.types ?? [];
 
   async function loadWarehouses() {
     const res = await fetch("/api/warehouses");
@@ -189,8 +189,7 @@ export function StaffBulkImportPanel({
         body: JSON.stringify({
           batch_id: batchId,
           csv,
-          warehouse_id: warehouseId,
-          default_staff_type_code: defaultStaffType
+          warehouse_id: warehouseId
         })
       });
       const putJson = await put.json();
@@ -227,8 +226,7 @@ export function StaffBulkImportPanel({
             <div className="space-y-1">
               <CardTitle className="text-base">Bulk add staff</CardTitle>
               <CardDescription>
-                Set warehouse and defaults first, then paste or upload CSV.
-                Required columns:{" "}
+                Choose a warehouse, then paste or upload CSV. Required:{" "}
                 <code className="rounded bg-muted px-1.5 py-0.5 text-xs">
                   employee_code
                 </code>
@@ -236,11 +234,15 @@ export function StaffBulkImportPanel({
                 <code className="rounded bg-muted px-1.5 py-0.5 text-xs">
                   full_name
                 </code>
-                ; optional{" "}
+                ,{" "}
                 <code className="rounded bg-muted px-1.5 py-0.5 text-xs">
                   staff_type_code
                 </code>{" "}
-                (defaults to {defaultStaffType}).
+                (must match a configured type). Optional:{" "}
+                <code className="rounded bg-muted px-1.5 py-0.5 text-xs">
+                  phone
+                </code>
+                .
               </CardDescription>
             </div>
           </div>
@@ -279,31 +281,17 @@ export function StaffBulkImportPanel({
               </div>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="csv-file">Load from file (optional)</Label>
-                <Input
-                  id="csv-file"
-                  type="file"
-                  accept=".csv,text/csv"
-                  className="cursor-pointer"
-                  onChange={(e) =>
-                    onFileSelected(e.target.files?.[0] ?? undefined)
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="staff-type">Default staff type code</Label>
-                <Input
-                  id="staff-type"
-                  value={defaultStaffType}
-                  onChange={(e) =>
-                    setDefaultStaffType(e.target.value.toUpperCase())
-                  }
-                  className="max-w-[120px] font-mono uppercase"
-                  maxLength={8}
-                />
-              </div>
+            <div className="space-y-2">
+              <Label htmlFor="csv-file">Load from file (optional)</Label>
+              <Input
+                id="csv-file"
+                type="file"
+                accept=".csv,text/csv"
+                className="max-w-md cursor-pointer"
+                onChange={(e) =>
+                  onFileSelected(e.target.files?.[0] ?? undefined)
+                }
+              />
             </div>
 
             <div className="space-y-2">
@@ -314,8 +302,29 @@ export function StaffBulkImportPanel({
                 value={csv}
                 onChange={(e) => setCsv(e.target.value)}
                 className="min-h-[200px] resize-y font-mono text-sm"
-                placeholder="employee_code,full_name,staff_type_code"
+                placeholder="employee_code,full_name,staff_type_code,phone"
               />
+            </div>
+
+            <div className="space-y-2 rounded-md border bg-muted/20 p-3">
+              <Label className="text-xs text-muted-foreground">
+                Staff type code legend
+              </Label>
+              {staffTypes.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No staff types found.
+                </p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {staffTypes.map((t) => (
+                    <Badge key={t.id} variant="secondary" className="font-normal">
+                      <span className="font-mono text-xs">{t.code}</span>
+                      <span className="mx-1 text-muted-foreground">—</span>
+                      <span>{t.display_name}</span>
+                    </Badge>
+                  ))}
+                </div>
+              )}
             </div>
 
             <Button type="submit" disabled={submitting || !warehouseId}>

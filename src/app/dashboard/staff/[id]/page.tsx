@@ -26,6 +26,7 @@ type Staff = {
   id: string;
   full_name: string;
   employee_code: string;
+  phone: string | null;
   warehouse_id: string | null;
   staff_type_id: string;
   is_active: boolean;
@@ -75,6 +76,7 @@ export default function EditStaffPage() {
         body: JSON.stringify({
           full_name: staff.full_name,
           employee_code: staff.employee_code,
+          phone: staff.phone?.trim() ? staff.phone.trim() : null,
           warehouse_id: staff.warehouse_id,
           staff_type_id: staff.staff_type_id,
           is_active: staff.is_active
@@ -131,6 +133,17 @@ export default function EditStaffPage() {
                   setStaff({ ...staff, employee_code: e.target.value })
                 }
                 required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="phone">Phone (optional)</Label>
+              <Input
+                id="phone"
+                type="tel"
+                value={staff.phone ?? ""}
+                onChange={(e) =>
+                  setStaff({ ...staff, phone: e.target.value || null })
+                }
               />
             </div>
             {warehouses.length > 0 && (

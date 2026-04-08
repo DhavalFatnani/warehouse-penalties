@@ -46,11 +46,19 @@ export async function assertPenaltyAppliesToStaffType(
 ) {
   const { data: staff, error: sErr } = await adminClient
     .from("staff")
-    .select("staff_type_id")
+    .select("staff_type_id, is_active")
     .eq("id", staffId)
     .single();
   if (sErr || !staff) {
     throw new HttpError("NOT_FOUND", "Staff not found", 404);
+  }
+
+  if (!staff.is_active) {
+    throw new HttpError(
+      "STAFF_INACTIVE",
+      "Inactive staff cannot receive new penalties.",
+      400
+    );
   }
 
   const allowed = await getStaffTypeIdsForDefinition(

@@ -8,11 +8,23 @@ import {
   normalizePenaltyDefinition,
   PENALTY_DEFINITION_SELECT
 } from "@/lib/penalty-definitions-api";
+import {
+  assertPenaltyCodeActiveForUse,
+  assertPenaltyCodeMatchesDefinitionWarehouse,
+  fetchPenaltyCodeWarehouse
+} from "@/lib/penalty-code-guards";
+import { assertWarehouseAccess, getAccessibleWarehouseIds } from "@/lib/warehouse-access";
 
 export async function GET(req: NextRequest) {
   try {
-    await requireRole(["manager", "admin"]);
+    const { appUser } = await requireRole(["manager", "admin"]);
     const staffId = req.nextUrl.searchParams.get("staff_id");
+    const listWarehouseId = req.nextUrl.searchParams.get("warehouse_id");
+    const globalsOnly = req.nextUrl.searchParams.get("globals_only") === "1";
+
+    if (listWarehouseId && appUser.role !== "admin") {
+      await assertWarehouseAccess(appUser.id, appUser.role, listWarehouseId);
+    }
 
     let query = adminClient
       .from("penalty_definitions")
@@ -22,11 +34,11 @@ export async function GET(req: NextRequest) {
     if (staffId) {
       const { data: st, error: stErr } = await adminClient
         .from("staff")
-        .select("staff_type_id")
+        .select("staff_type_id, warehouse_id, is_active")
         .eq("id", staffId)
         .maybeSingle();
       if (stErr) throw new Error(stErr.message);
-      if (!st) {
+      if (!st || !st.is_active) {
         return jsonOk([]);
       }
 
@@ -42,6 +54,28 @@ export async function GET(req: NextRequest) {
         return jsonOk([]);
       }
       query = query.in("id", defIds).eq("is_active", true);
+      const wh = st.warehouse_id as string | null;
+      if (wh) {
+        query = query.or(`warehouse_id.is.null,warehouse_id.eq.${wh}`);
+      } else {
+        query = query.is("warehouse_id", null);
+      }
+    } else {
+      if (globalsOnly) {
+        query = query.is("warehouse_id", null);
+      } else if (listWarehouseId) {
+        query = query.or(
+          `warehouse_id.is.null,warehouse_id.eq.${listWarehouseId}`
+        );
+      } else if (appUser.role !== "admin") {
+        const ids = await getAccessibleWarehouseIds(appUser.id, appUser.role);
+        if (ids.length === 0) {
+          return jsonOk([]);
+        }
+        query = query.or(
+          `warehouse_id.is.null,warehouse_id.in.(${ids.join(",")})`
+        );
+      }
     }
 
     const { data, error } = await query;
@@ -64,10 +98,25 @@ export async function POST(req: NextRequest) {
       return toErrorResponse(parsed.error);
     }
 
+    const warehouse_id = parsed.data.warehouse_id ?? null;
+    if (warehouse_id) {
+      await assertWarehouseAccess(appUser.id, appUser.role, warehouse_id);
+    }
+
+    const codeRow = await fetchPenaltyCodeWarehouse(
+      adminClient,
+      parsed.data.penalty_code_id
+    );
+    assertPenaltyCodeActiveForUse(codeRow);
+    assertPenaltyCodeMatchesDefinitionWarehouse(
+      codeRow.warehouse_id,
+      warehouse_id
+    );
+
     const { staff_type_ids, ...fields } = parsed.data;
     const row = {
       ...fields,
-      category: parsed.data.category?.trim() || "General"
+      warehouse_id
     };
     if (
       row.structure_model === "fixed_per_occurrence" &&
