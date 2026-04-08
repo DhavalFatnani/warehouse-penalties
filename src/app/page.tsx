@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/server";
+import { AuthRecoveryRedirect } from "@/components/auth-recovery-redirect";
 import {
   Card,
   CardContent,
@@ -25,6 +26,7 @@ export default async function HomePage() {
 
   return (
     <div className="auth-page-bg relative min-h-[100dvh] overflow-hidden px-6 py-10 sm:px-8">
+      <AuthRecoveryRedirect />
       <div
         className="pointer-events-none absolute inset-x-0 top-0 h-56 bg-gradient-to-b from-primary/15 via-primary/5 to-transparent"
         aria-hidden
