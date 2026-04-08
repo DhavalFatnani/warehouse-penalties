@@ -3,9 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --turbo",
+    "dev": "next dev",
     "dev:webpack": "next dev",
-    "dev:3001": "next dev --turbo -p 3001",
+    "dev:3001": "next dev -p 3001",
+    "dev:turbo": "next dev --turbo",
     "clean": "rm -rf .next",
     "build": "next build",
     "start": "next start",

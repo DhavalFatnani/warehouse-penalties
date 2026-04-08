@@ -22,7 +22,13 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertCircle } from "lucide-react";
 
-type UserRow = { id: string; email: string; full_name: string; role: string };
+type UserRow = {
+  id: string;
+  email: string;
+  full_name: string;
+  role: string;
+  is_active?: boolean;
+};
 type Warehouse = {
   id: string;
   code: string;
@@ -40,8 +46,8 @@ export default function AdminAccessPage() {
 
   async function loadInitial() {
     const [uRes, wRes] = await Promise.all([
-      fetch("/api/admin/users"),
-      fetch("/api/warehouses")
+      fetch("/api/admin/users?include_inactive=true"),
+      fetch("/api/warehouses?include_inactive=true")
     ]);
     const [uJson, wJson] = await Promise.all([uRes.json(), wRes.json()]);
     if (!uRes.ok) {
@@ -158,6 +164,7 @@ export default function AdminAccessPage() {
                   {users.map((u) => (
                     <SelectItem key={u.id} value={u.id}>
                       {u.full_name} ({u.email}) — {u.role}
+                      {u.is_active === false ? " (inactive)" : ""}
                     </SelectItem>
                   ))}
                 </SelectContent>
