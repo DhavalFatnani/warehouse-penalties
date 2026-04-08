@@ -15,6 +15,19 @@ function mapInviteAuthError(message: string): Error {
       429
     );
   }
+  if (
+    lower.includes("smtp") ||
+    lower.includes("mail") ||
+    lower.includes("email provider") ||
+    lower.includes("authentication failed") ||
+    lower.includes("invalid login")
+  ) {
+    return new HttpError(
+      "EMAIL_DELIVERY_CONFIG",
+      "Supabase could not send the invite email via SMTP. In Supabase Authentication → Emails, set SMTP password to Brevo SMTP key (not xkeysib API key), SMTP username to your Brevo login email, and verify sender in Brevo. Then check Supabase Auth logs and Brevo transactional logs.",
+      502
+    );
+  }
   return new Error(message);
 }
 

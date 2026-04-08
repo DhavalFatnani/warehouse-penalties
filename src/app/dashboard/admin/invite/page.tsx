@@ -25,6 +25,18 @@ import { AlertCircle } from "lucide-react";
 
 type Warehouse = { id: string; code: string; name: string };
 
+function shouldShowEmailTroubleshooting(error: string | null): boolean {
+  if (!error) return false;
+  const lower = error.toLowerCase();
+  return (
+    lower.includes("smtp") ||
+    lower.includes("email") ||
+    lower.includes("mail") ||
+    lower.includes("delivery") ||
+    lower.includes("brevo")
+  );
+}
+
 export default function AdminInvitePage() {
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
@@ -104,12 +116,16 @@ export default function AdminInvitePage() {
       <Card>
         <CardHeader>
           <CardTitle>New account</CardTitle>
-          <CardDescription className="space-y-2">
+          <CardDescription>
             <p>
               Use a unique email. Supabase sends the message (custom SMTP under
               Authentication → Emails).
             </p>
-            <p className="text-xs leading-relaxed text-muted-foreground">
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {shouldShowEmailTroubleshooting(error) ? (
+            <p className="mb-4 text-xs leading-relaxed text-muted-foreground">
               <strong>Brevo:</strong> In Supabase SMTP, password must be your{" "}
               <strong>SMTP key</strong> from Brevo (SMTP &amp; API → SMTP), not
               the xkeysib-… marketing API key. Username is usually your Brevo
@@ -117,9 +133,7 @@ export default function AdminInvitePage() {
               check <strong>Supabase Auth logs</strong> and{" "}
               <strong>Brevo transactional</strong> logs if mail never arrives.
             </p>
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
+          ) : null}
           <form className="space-y-4" onSubmit={onSubmit}>
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
