@@ -4,10 +4,12 @@ import { getAccessibleWarehouseIds } from "@/lib/warehouse-access";
 import { HttpError, jsonOk, toErrorResponse } from "@/lib/http";
 import { warehouseCreateSchema } from "@/lib/validators";
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const { appUser } = await requireRole(["manager", "admin"]);
     const ids = await getAccessibleWarehouseIds(appUser.id, appUser.role);
+    const includeInactive =
+      new URL(req.url).searchParams.get("include_inactive") === "true";
 
     let query = adminClient
       .from("warehouses")
@@ -19,6 +21,9 @@ export async function GET() {
         return jsonOk([]);
       }
       query = query.in("id", ids);
+    }
+    if (!includeInactive) {
+      query = query.eq("is_active", true);
     }
 
     const { data, error } = await query;

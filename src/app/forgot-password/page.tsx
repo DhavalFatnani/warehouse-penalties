@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { FormEvent, useState } from "react";
-import { createClient } from "@/lib/supabase/browser";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -25,19 +24,23 @@ export default function ForgotPasswordPage() {
     setError(null);
     setLoading(true);
     try {
-      const supabase = createClient();
-      const base =
-        typeof window !== "undefined"
-          ? window.location.origin
-          : (process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ?? "");
-      const { error: resetErr } = await supabase.auth.resetPasswordForEmail(
-        email.trim(),
-        {
-          redirectTo: `${base}/auth/callback?next=${encodeURIComponent("/auth/update-password")}`
-        }
-      );
-      if (resetErr) {
-        setError(resetErr.message);
+      const res = await fetch("/api/auth/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim() })
+      });
+      const raw = await res.text();
+      let payload: { error?: { message?: string } } = {};
+      try {
+        payload = raw ? (JSON.parse(raw) as { error?: { message?: string } }) : {};
+      } catch {
+        payload = {};
+      }
+      if (!res.ok) {
+        setError(
+          payload.error?.message ??
+            "Could not send reset email. Please try again in a moment."
+        );
         return;
       }
       setSubmitted(true);

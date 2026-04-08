@@ -65,7 +65,7 @@ export default function AdminUsersPage() {
 
   async function load() {
     setError(null);
-    const res = await fetch("/api/admin/users");
+    const res = await fetch("/api/admin/users?include_inactive=true");
     const json = await res.json();
     if (!res.ok) {
       const msg = json?.error?.message ?? "Failed to load users";

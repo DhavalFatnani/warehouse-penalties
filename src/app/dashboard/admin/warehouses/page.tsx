@@ -61,7 +61,7 @@ export default function AdminWarehousesPage() {
   const [loading, setLoading] = useState(false);
 
   async function load() {
-    const res = await fetch("/api/warehouses");
+    const res = await fetch("/api/warehouses?include_inactive=true");
     const json = await res.json();
     if (!res.ok) {
       toast.error(json?.error?.message ?? "Failed to load warehouses");

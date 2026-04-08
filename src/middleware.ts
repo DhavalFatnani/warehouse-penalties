@@ -3,6 +3,7 @@ import { createServerClient } from "@supabase/ssr";
 
 export async function middleware(req: NextRequest) {
   const res = NextResponse.next();
+  const pathname = req.nextUrl.pathname;
 
   const supabase = createServerClient(
     process.env.SUPABASE_URL!,
@@ -24,13 +25,13 @@ export async function middleware(req: NextRequest) {
 
   const { data } = await supabase.auth.getUser();
   const allowPublicSignup = process.env.NEXT_PUBLIC_ALLOW_PUBLIC_SIGNUP === "true";
+  const isPublicApi = pathname === "/api/auth/forgot-password";
   const isProtected =
-    req.nextUrl.pathname.startsWith("/dashboard") ||
-    req.nextUrl.pathname.startsWith("/api");
+    pathname.startsWith("/dashboard") ||
+    (pathname.startsWith("/api") && !isPublicApi);
   const isAuthRoute =
-    req.nextUrl.pathname.startsWith("/login") ||
-    req.nextUrl.pathname.startsWith("/forgot-password");
-  const isSignupRoute = req.nextUrl.pathname.startsWith("/signup");
+    pathname.startsWith("/login") || pathname.startsWith("/forgot-password");
+  const isSignupRoute = pathname.startsWith("/signup");
 
   if (isProtected && !data.user) {
     return NextResponse.redirect(new URL("/login", req.url));
