@@ -87,16 +87,26 @@ export async function POST(req: NextRequest) {
       throw new Error("Staff not found");
     }
 
-    const whId =
-      parsed.data.warehouse_id ?? staffRow.warehouse_id ?? null;
-    if (whId) {
-      await assertWarehouseAccess(appUser.id, appUser.role, whId);
+    if (
+      parsed.data.warehouse_id &&
+      parsed.data.warehouse_id !== staffRow.warehouse_id
+    ) {
+      throw new HttpError(
+        "WAREHOUSE_MISMATCH",
+        "Penalty warehouse must match the selected staff member's warehouse.",
+        400
+      );
     }
 
-    await assertPenaltyAppliesToStaffType(
+    const { staffWarehouseId } = await assertPenaltyAppliesToStaffType(
       parsed.data.staff_id,
       parsed.data.penalty_definition_id
     );
+
+    const whId = staffWarehouseId ?? null;
+    if (whId) {
+      await assertWarehouseAccess(appUser.id, appUser.role, whId);
+    }
 
     const computed = await computePenaltyPayload(adminClient, {
       staff_id: parsed.data.staff_id,

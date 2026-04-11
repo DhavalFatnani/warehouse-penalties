@@ -1,9 +1,9 @@
 ---
-description: Core project principles for warehouse-penalties (scope, style, verification)
+description: Core project principles for warehouse-payroll (scope, style, verification)
 alwaysApply: true
 ---
 
-# Warehouse Penalties — core
+# Warehouse payroll — core
 
 - **Stack**: Next.js 14 (App Router), TypeScript, Supabase (Postgres + Auth + RLS), Vitest.
 - **Scope**: Implement only what the task requires. Do not refactor unrelated code, delete comments, or add docs/README unless asked.

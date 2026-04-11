@@ -111,7 +111,7 @@ export function DashboardShell({
           </Sheet>
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-semibold tracking-tight">
-              Penalty Platform
+              Warehouse payroll
             </p>
             <p className="truncate text-[11px] text-muted-foreground">
               Operations

@@ -148,7 +148,7 @@ export function SidebarPanel({
         </div>
         <div className="min-w-0">
           <div className="truncate text-sm font-semibold leading-tight tracking-tight">
-            Penalty Platform
+            Warehouse payroll
           </div>
           <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
             Operations

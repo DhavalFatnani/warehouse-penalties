@@ -39,12 +39,12 @@ export default async function HomePage() {
               Operations Control Center
             </div>
             <CardTitle className="text-3xl tracking-tight sm:text-4xl">
-              Warehouse Penalty Management
+              Warehouse payroll
             </CardTitle>
             <CardDescription className="max-w-3xl text-sm leading-relaxed text-muted-foreground">
-              Manage the full penalty workflow in one place: maintain staff and
-              definitions, apply penalties with structure rules, and run settlement
-              cycles with export-ready records.
+              Run warehouse payroll workflows in one place: maintain staff and
+              penalty definitions, apply penalties with structure rules, and run
+              settlement cycles with export-ready records.
             </CardDescription>
             <div className="flex flex-wrap gap-2 pt-1">
               <Button variant="secondary" size="sm" asChild>

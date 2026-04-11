@@ -43,10 +43,10 @@ export async function getStaffTypeIdsForDefinition(
 export async function assertPenaltyAppliesToStaffType(
   staffId: string,
   penaltyDefinitionId: string
-) {
+): Promise<{ staffWarehouseId: string | null }> {
   const { data: staff, error: sErr } = await adminClient
     .from("staff")
-    .select("staff_type_id, is_active")
+    .select("staff_type_id, warehouse_id, is_active")
     .eq("id", staffId)
     .single();
   if (sErr || !staff) {
@@ -81,4 +81,29 @@ export async function assertPenaltyAppliesToStaffType(
       400
     );
   }
+
+  const { data: def, error: dErr } = await adminClient
+    .from("penalty_definitions")
+    .select("warehouse_id, is_active")
+    .eq("id", penaltyDefinitionId)
+    .single();
+  if (dErr || !def) {
+    throw new HttpError("NOT_FOUND", "Penalty definition not found", 404);
+  }
+  if (!def.is_active) {
+    throw new HttpError(
+      "INVALID_DEFINITION",
+      "This penalty definition is inactive.",
+      400
+    );
+  }
+  if (def.warehouse_id && def.warehouse_id !== staff.warehouse_id) {
+    throw new HttpError(
+      "DEFINITION_WAREHOUSE_MISMATCH",
+      "This penalty definition is warehouse-specific and cannot be applied to staff from a different warehouse.",
+      400
+    );
+  }
+
+  return { staffWarehouseId: staff.warehouse_id as string | null };
 }

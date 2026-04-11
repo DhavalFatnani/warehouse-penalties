@@ -1,6 +1,6 @@
-# warehouse-penalties
+# warehouse-payroll
 
-Manager-facing warehouse penalties system built on Supabase + Next.js.
+Manager-facing warehouse payroll app (penalties, staff, and settlement) built on Supabase + Next.js.
 
 ## Setup
 

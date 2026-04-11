@@ -1,4 +1,5 @@
 import "./globals.css";
+import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import { Providers } from "@/components/providers";
@@ -9,6 +10,15 @@ const fontSans = Plus_Jakarta_Sans({
   variable: "--font-sans",
   display: "swap"
 });
+
+export const metadata: Metadata = {
+  title: {
+    default: "Warehouse payroll",
+    template: "%s · Warehouse payroll"
+  },
+  description:
+    "Warehouse payroll: staff, penalty definitions, applications, and settlement."
+};
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
