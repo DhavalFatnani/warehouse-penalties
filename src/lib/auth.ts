@@ -19,11 +19,11 @@ export async function requireRole(roles: AppRole[]) {
   const user = await requireSession();
   const { data, error } = await adminClient
     .from("users")
-    .select("id, role, email")
+    .select("id, role, email, is_active")
     .eq("auth_user_id", user.id)
     .single();
 
-  if (error || !data || !hasRequiredRole(data.role, roles)) {
+  if (error || !data || !data.is_active || !hasRequiredRole(data.role, roles)) {
     throw new Error("Forbidden");
   }
 
@@ -38,7 +38,7 @@ export async function getCurrentAppUser() {
     .eq("auth_user_id", user.id)
     .single();
 
-  if (error || !data) {
+  if (error || !data || !data.is_active) {
     throw new Error("Forbidden");
   }
 

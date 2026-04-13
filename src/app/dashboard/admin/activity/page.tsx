@@ -203,7 +203,7 @@ export default function AdminActivityPage() {
       const res = await fetch(`/api/admin/activity-logs?${params.toString()}`);
       if (!res.ok) {
         const json = await res.json();
-        throw new Error(json?.error ?? "Failed to export CSV");
+        throw new Error(json?.error?.message ?? "Failed to export CSV");
       }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);

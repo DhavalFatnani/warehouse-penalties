@@ -58,7 +58,7 @@ export function toErrorResponse(err: unknown): NextResponse<ApiErrorBody> {
         403
       );
     }
-    return jsonError("INTERNAL_ERROR", err.message, 500);
+    return jsonError("INTERNAL_ERROR", "An unexpected error occurred", 500);
   }
-  return jsonError("INTERNAL_ERROR", "Unexpected error", 500);
+  return jsonError("INTERNAL_ERROR", "An unexpected error occurred", 500);
 }
