@@ -178,8 +178,8 @@ export function StaffBulkImportPanel({
         return;
       }
 
-      const put = await fetch("/api/imports", {
-        method: "PUT",
+      const put = await fetch("/api/imports/commit", {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           batch_id: batchId,

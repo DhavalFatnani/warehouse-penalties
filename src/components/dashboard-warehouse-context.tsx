@@ -11,6 +11,7 @@ import {
 } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { AppRole } from "@/lib/auth";
+import { isAdminRole } from "@/lib/roles";
 import { cn } from "@/lib/utils";
 import { Label } from "@/components/ui/label";
 import {
@@ -33,7 +34,8 @@ type DashboardWarehouseContextValue = {
   warehouseId: string;
   warehouses: WarehouseRow[];
   warehousesLoading: boolean;
-  /** Pass "" for admin “all sites”. */
+  warehousesError: boolean;
+  /** Pass “” for admin “all sites”. */
   setWarehouseId: (id: string) => void;
   /** Append `warehouse_id` to dashboard links (skips admin routes). */
   hrefWithWarehouse: (href: string) => string;
@@ -89,11 +91,15 @@ export function DashboardWarehouseProvider({
 
   const [warehouses, setWarehouses] = useState<WarehouseRow[]>([]);
   const [warehousesLoading, setWarehousesLoading] = useState(true);
+  const [warehousesError, setWarehousesError] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     void fetch("/api/warehouses?include_inactive=true")
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error(`${r.status}`);
+        return r.json();
+      })
       .then((j) => {
         if (cancelled) return;
         const list = (j.data ?? []) as Record<string, unknown>[];
@@ -105,6 +111,9 @@ export function DashboardWarehouseProvider({
             is_active: w.is_active !== false
           }))
         );
+      })
+      .catch(() => {
+        if (!cancelled) setWarehousesError(true);
       })
       .finally(() => {
         if (!cancelled) setWarehousesLoading(false);
@@ -127,9 +136,9 @@ export function DashboardWarehouseProvider({
     [router, pathname, searchParams]
   );
 
-  /** Managers: default to first accessible site when none selected. */
+  /** Non-admins: default to first accessible site when none selected. */
   useEffect(() => {
-    if (userRole !== "manager") return;
+    if (isAdminRole(userRole)) return;
     if (warehouseId) return;
     if (warehousesLoading || warehouses.length === 0) return;
     setWarehouseId(warehouses[0].id);
@@ -151,6 +160,7 @@ export function DashboardWarehouseProvider({
       warehouseId,
       warehouses,
       warehousesLoading,
+      warehousesError,
       setWarehouseId,
       hrefWithWarehouse,
       userRole
@@ -159,6 +169,7 @@ export function DashboardWarehouseProvider({
       warehouseId,
       warehouses,
       warehousesLoading,
+      warehousesError,
       setWarehouseId,
       hrefWithWarehouse,
       userRole
@@ -190,20 +201,29 @@ export function DashboardWarehouseSelect({
     warehouseId,
     warehouses,
     warehousesLoading,
+    warehousesError,
     setWarehouseId,
     userRole
   } = ctx;
 
-  const showAll = userRole === "admin";
+  if (warehousesError) {
+    return (
+      <div className={cn("w-full min-w-0", !compact && "px-2", className)}>
+        <p className="text-xs text-destructive">Failed to load sites</p>
+      </div>
+    );
+  }
+
+  const showAll = isAdminRole(userRole);
   const selectValue =
-    userRole === "manager"
+    !isAdminRole(userRole)
       ? warehouseId || warehouses[0]?.id || ""
       : warehouseId
         ? warehouseId
         : showAll
           ? "__all__"
           : "";
-  const singleManagerSite = userRole === "manager" && warehouses.length === 1;
+  const singleManagerSite = !isAdminRole(userRole) && warehouses.length === 1;
   const disabled = warehousesLoading || warehouses.length === 0;
 
   return (

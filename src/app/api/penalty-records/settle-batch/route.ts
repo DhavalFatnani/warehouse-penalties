@@ -64,16 +64,17 @@ export async function POST(req: NextRequest) {
 
     if (upErr) throw new Error(upErr.message);
 
-    await writeAudit({
-      entityType: "penalty_record",
-      entityId: parsed.data.record_ids[0] ?? appUser.id,
-      action: "bulk_settle",
-      changedByUserId: appUser.id,
-      newValues: {
-        record_ids: parsed.data.record_ids,
-        count: updated?.length ?? 0
-      }
-    });
+    await Promise.all(
+      (updated ?? []).map((r) =>
+        writeAudit({
+          entityType: "penalty_record",
+          entityId: r.id as string,
+          action: "settle",
+          changedByUserId: appUser.id,
+          newValues: { status: "settled" }
+        })
+      )
+    );
 
     return jsonOk({ settled_count: updated?.length ?? 0, ids: updated ?? [] });
   } catch (e) {

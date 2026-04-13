@@ -26,21 +26,8 @@ export async function getStaffIdsInAccessibleWarehouses(
 }
 
 /**
- * @deprecated Do not pass to `.or()`. PostgREST treats commas as OR-separators, so
- * `warehouse_id.in.(a,b)` inside an `.or()` filter string breaks with multiple UUIDs.
- * Use two queries: `.in('warehouse_id', ids)` and `.is('warehouse_id', null).in('staff_id', ids)` then merge.
- */
-export function buildRecordVisibilityOrFilter(
-  warehouseIds: string[],
-  staffIds: string[]
-) {
-  if (!warehouseIds.length || !staffIds.length) return null;
-  return `warehouse_id.in.(${warehouseIds.join(",")}),and(warehouse_id.is.null,staff_id.in.(${staffIds.join(",")}))`;
-}
-
-/**
- * Manager visibility without broken `.or()` filters (see buildRecordVisibilityOrFilter).
- * Merges two disjoint queries by id.
+ * Manager visibility: merges two disjoint queries by id to avoid PostgREST
+ * `.or()` breakage with multi-UUID `.in()` filters inside OR expressions.
  *
  * When `narrowWarehouseId` is set, only rows for that warehouse are included (second branch skipped).
  */
@@ -48,7 +35,7 @@ export async function fetchPenaltyViewForManager(
   warehouseIds: string[],
   staffIds: string[],
   narrowWarehouseId: string | null | undefined,
-  configure: (q: AnyPenaltyViewQuery) => AnyPenaltyViewQuery,
+  configure: (q: PenaltyViewQuery) => PenaltyViewQuery,
   selectList = "*"
 ): Promise<Record<string, unknown>[]> {
   if (!warehouseIds.length || !staffIds.length) return [];
@@ -103,5 +90,9 @@ export async function fetchPenaltyViewForManager(
   return [...byId.values()];
 }
 
+// The Supabase PostgREST filter builder for v_penalty_records_with_staff. Typed
+// as `any` because this view is not in the generated DB types and the builder
+// generic cannot be reconstructed without them. The any is contained here —
+// callers of fetchPenaltyViewForManager receive typed Record<string, unknown>[].
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnyPenaltyViewQuery = any;
+type PenaltyViewQuery = any;

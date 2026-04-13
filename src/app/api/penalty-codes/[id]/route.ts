@@ -8,6 +8,7 @@ import {
   normalizePenaltyCodeRow,
   PENALTY_CODE_SELECT
 } from "@/lib/penalty-code-row";
+import { assertCatalogAccessAllowed } from "@/lib/roles";
 
 export async function PATCH(
   req: NextRequest,
@@ -15,6 +16,7 @@ export async function PATCH(
 ) {
   try {
     const { appUser } = await requireRole(["manager", "admin"]);
+    assertCatalogAccessAllowed(appUser.role);
     const body = await req.json();
     const parsed = penaltyCodePatchSchema.safeParse(body);
     if (!parsed.success) return toErrorResponse(parsed.error);

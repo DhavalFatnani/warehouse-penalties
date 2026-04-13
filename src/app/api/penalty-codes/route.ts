@@ -8,10 +8,12 @@ import {
   normalizePenaltyCodeRow,
   PENALTY_CODE_SELECT
 } from "@/lib/penalty-code-row";
+import { assertCatalogAccessAllowed } from "@/lib/roles";
 
 export async function GET(req: NextRequest) {
   try {
     const { appUser } = await requireRole(["manager", "admin"]);
+    assertCatalogAccessAllowed(appUser.role);
     const narrowWh = req.nextUrl.searchParams.get("warehouse_id");
     const forDefWh = req.nextUrl.searchParams.get("for_definition_warehouse");
     const includeInactive =
@@ -102,6 +104,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const { appUser } = await requireRole(["manager", "admin"]);
+    assertCatalogAccessAllowed(appUser.role);
     const body = await req.json();
     const parsed = penaltyCodeCreateSchema.safeParse(body);
     if (!parsed.success) return toErrorResponse(parsed.error);

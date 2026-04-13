@@ -9,9 +9,12 @@ import {
   assertRoleChangeAllowed
 } from "@/lib/admin-guards";
 import { writeAudit } from "@/lib/audit";
+import { AppRole, assertStoreManagerWarehouseLimit } from "@/lib/roles";
 
 const patchSchema = z.object({
-  role: z.enum(["manager", "admin"]).optional(),
+  role: z
+    .enum(["store_manager", "central_team_member", "admin"])
+    .optional(),
   is_active: z.boolean().optional(),
   full_name: z.string().min(1).optional()
 });
@@ -143,6 +146,17 @@ export async function PATCH(
 
     const nextRole = parsed.data.role ?? target.role;
     const nextActive = parsed.data.is_active ?? target.is_active;
+    if (nextRole === "store_manager") {
+      const { data: currentAccess, error: accessErr } = await adminClient
+        .from("user_warehouse_access")
+        .select("warehouse_id")
+        .eq("user_id", target.id);
+      if (accessErr) throw new Error(accessErr.message);
+      assertStoreManagerWarehouseLimit(
+        nextRole as AppRole,
+        (currentAccess ?? []).map((row) => String(row.warehouse_id))
+      );
+    }
 
     assertRoleChangeAllowed({
       actorRole: appUser.role,

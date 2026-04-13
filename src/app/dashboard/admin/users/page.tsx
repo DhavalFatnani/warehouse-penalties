@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -31,15 +31,36 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AlertCircle, Trash2 } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from "@/components/ui/select";
 
 type UserRow = {
   id: string;
   email: string;
   full_name: string;
-  role: "manager" | "admin";
+  role: "store_manager" | "central_team_member" | "admin";
   is_active: boolean;
   created_at: string;
 };
+
+function roleLabel(role: UserRow["role"]): string {
+  if (role === "store_manager") return "Store manager";
+  if (role === "central_team_member") return "Central team member";
+  return "Admin";
+}
+
+function roleTone(
+  role: UserRow["role"]
+): "default" | "secondary" | "outline" {
+  if (role === "admin") return "default";
+  if (role === "store_manager") return "secondary";
+  return "outline";
+}
 
 type DeletionImpact = {
   penalty_records_removed: number;
@@ -62,6 +83,13 @@ export default function AdminUsersPage() {
   const [impactError, setImpactError] = useState<string | null>(null);
   const [confirmEmail, setConfirmEmail] = useState("");
   const [deleting, setDeleting] = useState(false);
+  const [query, setQuery] = useState("");
+  const [roleFilter, setRoleFilter] = useState<
+    "all" | "admin" | "store_manager" | "central_team_member"
+  >("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">(
+    "all"
+  );
 
   async function load() {
     setError(null);
@@ -175,13 +203,34 @@ export default function AdminUsersPage() {
     confirmEmail.trim().toLowerCase() ===
       removeTarget.email.trim().toLowerCase();
 
+  const filteredRows = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return rows.filter((row) => {
+      if (roleFilter !== "all" && row.role !== roleFilter) return false;
+      if (statusFilter === "active" && !row.is_active) return false;
+      if (statusFilter === "inactive" && row.is_active) return false;
+      if (!q) return true;
+      return [row.full_name, row.email, roleLabel(row.role)]
+        .join(" ")
+        .toLowerCase()
+        .includes(q);
+    });
+  }, [rows, query, roleFilter, statusFilter]);
+
+  const metrics = useMemo(() => {
+    const active = rows.filter((r) => r.is_active).length;
+    const inactive = rows.length - active;
+    const admins = rows.filter((r) => r.role === "admin").length;
+    return { total: rows.length, active, inactive, admins };
+  }, [rows]);
+
   return (
     <div className="mx-auto max-w-5xl space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Users</h1>
         <p className="text-sm text-muted-foreground">
-          Manage roles, activation, and permanent removal. Removal is
-          irreversible.
+          Manage role assignment, activation status, and permanent removal from
+          one place.
         </p>
       </div>
 
@@ -193,15 +242,85 @@ export default function AdminUsersPage() {
         </Alert>
       ) : null}
 
+      <div className="grid gap-3 sm:grid-cols-4">
+        <Card>
+          <CardHeader className="pb-1">
+            <CardDescription>Total users</CardDescription>
+            <CardTitle className="text-2xl">{metrics.total}</CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader className="pb-1">
+            <CardDescription>Active</CardDescription>
+            <CardTitle className="text-2xl">{metrics.active}</CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader className="pb-1">
+            <CardDescription>Inactive</CardDescription>
+            <CardTitle className="text-2xl">{metrics.inactive}</CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader className="pb-1">
+            <CardDescription>Admins</CardDescription>
+            <CardTitle className="text-2xl">{metrics.admins}</CardTitle>
+          </CardHeader>
+        </Card>
+      </div>
+
       <Card>
         <CardHeader>
           <CardTitle>Accounts</CardTitle>
           <CardDescription>
-            Managers operate day-to-day; admins can access this console and
-            warehouse management.
+            Store managers are single-site, central team members have full
+            operational access, and admins manage users/settings.
           </CardDescription>
         </CardHeader>
-        <CardContent className="p-0">
+        <CardContent className="space-y-4 p-4">
+          <div className="grid gap-3 sm:grid-cols-4">
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search name, email, role"
+              className="sm:col-span-2"
+            />
+            <Select
+              value={roleFilter}
+              onValueChange={(v) =>
+                setRoleFilter(
+                  v as "all" | "admin" | "store_manager" | "central_team_member"
+                )
+              }
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All roles</SelectItem>
+                <SelectItem value="admin">Admin</SelectItem>
+                <SelectItem value="store_manager">Store manager</SelectItem>
+                <SelectItem value="central_team_member">
+                  Central team member
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            <Select
+              value={statusFilter}
+              onValueChange={(v) =>
+                setStatusFilter(v as "all" | "active" | "inactive")
+              }
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All status</SelectItem>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="inactive">Inactive</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           <Table>
             <TableHeader>
               <TableRow>
@@ -209,27 +328,30 @@ export default function AdminUsersPage() {
                 <TableHead>Email</TableHead>
                 <TableHead>Role</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Quick edit</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.length === 0 ? (
+              {filteredRows.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={5}
+                    colSpan={6}
                     className="py-10 text-center text-muted-foreground"
                   >
-                    No users loaded.
+                    No users match the current filters.
                   </TableCell>
                 </TableRow>
               ) : (
-                rows.map((row) => (
+                filteredRows.map((row) => (
                   <TableRow key={row.id}>
                     <TableCell className="font-medium">{row.full_name}</TableCell>
                     <TableCell className="text-muted-foreground">
                       {row.email}
                     </TableCell>
-                    <TableCell className="capitalize">{row.role}</TableCell>
+                    <TableCell>
+                      <Badge variant={roleTone(row.role)}>{roleLabel(row.role)}</Badge>
+                    </TableCell>
                     <TableCell>
                       {row.is_active ? (
                         <Badge>Active</Badge>
@@ -237,21 +359,33 @@ export default function AdminUsersPage() {
                         <Badge variant="secondary">Inactive</Badge>
                       )}
                     </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex flex-wrap justify-end gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          disabled={busyId === row.id}
-                          onClick={() =>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <Select
+                          value={row.role}
+                          onValueChange={(v) =>
                             patchUser(row.id, {
-                              role: row.role === "admin" ? "manager" : "admin"
+                              role: v as
+                                | "store_manager"
+                                | "central_team_member"
+                                | "admin"
                             })
                           }
+                          disabled={busyId === row.id}
                         >
-                          Make {row.role === "admin" ? "manager" : "admin"}
-                        </Button>
+                          <SelectTrigger className="h-8 w-[190px]">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="store_manager">
+                              Store manager
+                            </SelectItem>
+                            <SelectItem value="central_team_member">
+                              Central team member
+                            </SelectItem>
+                            <SelectItem value="admin">Admin</SelectItem>
+                          </SelectContent>
+                        </Select>
                         <Button
                           type="button"
                           variant="outline"
@@ -263,6 +397,10 @@ export default function AdminUsersPage() {
                         >
                           {row.is_active ? "Deactivate" : "Activate"}
                         </Button>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex flex-wrap justify-end gap-2">
                         <Button
                           type="button"
                           variant="destructive"
@@ -290,6 +428,10 @@ export default function AdminUsersPage() {
               )}
             </TableBody>
           </Table>
+          <p className="text-xs text-muted-foreground">
+            Quick edit updates role/status instantly. Removal is permanent and
+            requires explicit email confirmation.
+          </p>
         </CardContent>
       </Card>
 

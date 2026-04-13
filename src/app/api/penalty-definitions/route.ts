@@ -14,10 +14,12 @@ import {
   fetchPenaltyCodeWarehouse
 } from "@/lib/penalty-code-guards";
 import { assertWarehouseAccess, getAccessibleWarehouseIds } from "@/lib/warehouse-access";
+import { assertCatalogAccessAllowed } from "@/lib/roles";
 
 export async function GET(req: NextRequest) {
   try {
     const { appUser } = await requireRole(["manager", "admin"]);
+    assertCatalogAccessAllowed(appUser.role);
     const staffId = req.nextUrl.searchParams.get("staff_id");
     const listWarehouseId = req.nextUrl.searchParams.get("warehouse_id");
     const globalsOnly = req.nextUrl.searchParams.get("globals_only") === "1";
@@ -92,6 +94,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const { appUser } = await requireRole(["manager", "admin"]);
+    assertCatalogAccessAllowed(appUser.role);
     const body = await req.json();
     const parsed = penaltyDefinitionSchema.safeParse(body);
     if (!parsed.success) {

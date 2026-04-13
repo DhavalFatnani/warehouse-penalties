@@ -113,10 +113,17 @@ export default function AdminAccessPage() {
   }
 
   function toggleWarehouse(id: string) {
+    const selectedUser = users.find((u) => u.id === selectedUserId);
+    if (selectedUser?.role === "store_manager") {
+      setSelectedWarehouses((prev) => (prev.includes(id) ? [] : [id]));
+      return;
+    }
     setSelectedWarehouses((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
     );
   }
+
+  const selectedUser = users.find((u) => u.id === selectedUserId);
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
@@ -141,7 +148,8 @@ export default function AdminAccessPage() {
         <CardHeader>
           <CardTitle>Assign warehouses</CardTitle>
           <CardDescription>
-            Managers only see penalties and staff for warehouses checked here.
+            Store managers must have exactly one warehouse. Central team members
+            can be assigned multiple warehouses.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -173,6 +181,11 @@ export default function AdminAccessPage() {
 
             <div className="space-y-3">
               <Label>Warehouses</Label>
+              {selectedUser?.role === "store_manager" ? (
+                <p className="text-xs text-muted-foreground">
+                  Store manager mode: select a single warehouse.
+                </p>
+              ) : null}
               <div className="space-y-3 rounded-lg border p-4">
                 {warehouses.length === 0 ? (
                   <p className="text-sm text-muted-foreground">

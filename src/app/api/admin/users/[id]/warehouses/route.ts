@@ -4,6 +4,7 @@ import { requireRole } from "@/lib/auth";
 import { adminClient } from "@/lib/supabase/admin";
 import { HttpError, jsonOk, toErrorResponse } from "@/lib/http";
 import { writeAudit } from "@/lib/audit";
+import { AppRole, assertStoreManagerWarehouseLimit } from "@/lib/roles";
 
 const schema = z.object({
   warehouse_ids: z.array(z.string().uuid())
@@ -44,10 +45,14 @@ export async function PUT(
 
     const { data: targetUser, error: targetErr } = await adminClient
       .from("users")
-      .select("id")
+      .select("id, role")
       .eq("id", params.id)
       .single();
     if (targetErr || !targetUser) throw new HttpError("NOT_FOUND", "User not found", 404);
+    assertStoreManagerWarehouseLimit(
+      String(targetUser.role) as AppRole,
+      parsed.data.warehouse_ids
+    );
 
     const { data: replacedCount, error: rpcError } = await adminClient.rpc(
       "replace_user_warehouse_access",

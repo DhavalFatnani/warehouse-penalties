@@ -45,7 +45,9 @@ function shouldShowEmailTroubleshooting(error: string | null): boolean {
 export default function AdminInvitePage() {
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
-  const [role, setRole] = useState<"manager" | "admin">("manager");
+  const [role, setRole] = useState<
+    "store_manager" | "central_team_member" | "admin"
+  >("central_team_member");
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [selectedWarehouses, setSelectedWarehouses] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -59,6 +61,10 @@ export default function AdminInvitePage() {
   }, []);
 
   function toggleWarehouse(id: string) {
+    if (role === "store_manager") {
+      setSelectedWarehouses((prev) => (prev.includes(id) ? [] : [id]));
+      return;
+    }
     setSelectedWarehouses((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
     );
@@ -91,7 +97,7 @@ export default function AdminInvitePage() {
       );
       setEmail("");
       setFullName("");
-      setRole("manager");
+      setRole("central_team_member");
       setSelectedWarehouses([]);
     } finally {
       setSubmitting(false);
@@ -167,13 +173,20 @@ export default function AdminInvitePage() {
               <Label htmlFor="role">Role</Label>
               <Select
                 value={role}
-                onValueChange={(v) => setRole(v as "manager" | "admin")}
+                onValueChange={(v) =>
+                  setRole(
+                    v as "store_manager" | "central_team_member" | "admin"
+                  )
+                }
               >
                 <SelectTrigger id="role">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="manager">Manager</SelectItem>
+                  <SelectItem value="store_manager">Store Manager</SelectItem>
+                  <SelectItem value="central_team_member">
+                    Central Team Member
+                  </SelectItem>
                   <SelectItem value="admin">Admin</SelectItem>
                 </SelectContent>
               </Select>
@@ -181,6 +194,11 @@ export default function AdminInvitePage() {
 
             <div className="space-y-3">
               <Label>Warehouses</Label>
+              {role === "store_manager" ? (
+                <p className="text-xs text-muted-foreground">
+                  Store Manager can be assigned to exactly one warehouse.
+                </p>
+              ) : null}
               <div className="space-y-3 rounded-lg border p-4">
                 {warehouses.length === 0 ? (
                   <p className="text-sm text-muted-foreground">

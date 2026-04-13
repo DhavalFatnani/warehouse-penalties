@@ -15,6 +15,7 @@ import {
 } from "@/lib/penalty-code-guards";
 import { assertWarehouseAccess } from "@/lib/warehouse-access";
 import { z } from "zod";
+import { assertCatalogAccessAllowed } from "@/lib/roles";
 
 const patchSchema = penaltyDefinitionSchema
   .partial()
@@ -30,6 +31,7 @@ export async function PATCH(
 ) {
   try {
     const { appUser } = await requireRole(["manager", "admin"]);
+    assertCatalogAccessAllowed(appUser.role);
     const body = await req.json();
     const parsed = patchSchema.safeParse(body);
     if (!parsed.success) {

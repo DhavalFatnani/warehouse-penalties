@@ -1,7 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { adminClient } from "@/lib/supabase/admin";
+import { AppRole, hasRequiredRole } from "@/lib/roles";
 
-export type AppRole = "manager" | "admin";
+export type { AppRole } from "@/lib/roles";
 
 export async function requireSession() {
   const supabase = createClient();
@@ -22,7 +23,7 @@ export async function requireRole(roles: AppRole[]) {
     .eq("auth_user_id", user.id)
     .single();
 
-  if (error || !data || !roles.includes(data.role)) {
+  if (error || !data || !hasRequiredRole(data.role, roles)) {
     throw new Error("Forbidden");
   }
 

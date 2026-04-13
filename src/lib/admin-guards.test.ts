@@ -11,7 +11,7 @@ describe("admin role/status guards", () => {
       assertRoleChangeAllowed({
         actorRole: "admin",
         targetRole: "admin",
-        nextRole: "manager",
+        nextRole: "central_team_member",
         activeAdminCount: 1,
         targetIsActive: true
       })
@@ -23,7 +23,7 @@ describe("admin role/status guards", () => {
       assertRoleChangeAllowed({
         actorRole: "admin",
         targetRole: "admin",
-        nextRole: "manager",
+        nextRole: "store_manager",
         activeAdminCount: 2,
         targetIsActive: true
       })

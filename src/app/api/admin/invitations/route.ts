@@ -5,6 +5,7 @@ import { adminClient } from "@/lib/supabase/admin";
 import { HttpError, jsonOk, toErrorResponse } from "@/lib/http";
 import { writeAudit } from "@/lib/audit";
 import { getAppUrlFromRequest } from "@/lib/app-url";
+import { AppRole, assertStoreManagerWarehouseLimit } from "@/lib/roles";
 
 function mapInviteAuthError(message: string): Error {
   const lower = message.toLowerCase();
@@ -34,7 +35,9 @@ function mapInviteAuthError(message: string): Error {
 const schema = z.object({
   email: z.string().email(),
   full_name: z.string().min(1),
-  role: z.enum(["manager", "admin"]).default("manager"),
+  role: z
+    .enum(["store_manager", "central_team_member", "admin"])
+    .default("central_team_member"),
   warehouse_ids: z.array(z.string().uuid()).default([])
 });
 
@@ -44,6 +47,10 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const parsed = schema.safeParse(body);
     if (!parsed.success) return toErrorResponse(parsed.error);
+    assertStoreManagerWarehouseLimit(
+      parsed.data.role as AppRole,
+      parsed.data.warehouse_ids
+    );
 
     const origin = getAppUrlFromRequest(req);
     const redirectTo = `${origin}/auth/callback?next=${encodeURIComponent("/dashboard")}`;

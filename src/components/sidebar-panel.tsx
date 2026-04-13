@@ -24,6 +24,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import type { AppRole } from "@/lib/auth";
+import { isStoreManagerRole } from "@/lib/roles";
 import {
   appendWarehouseToHref,
   DashboardWarehouseSelect,
@@ -73,7 +74,7 @@ function warehousesNavItem(role: AppRole): NavItem {
 function buildMainNavSections(
   role: AppRole
 ): { title: string | null; items: NavItem[] }[] {
-  return [
+  const sections: { title: string | null; items: NavItem[] }[] = [
     {
       title: null,
       items: [{ href: "/dashboard", label: "Overview", icon: LayoutDashboard }]
@@ -109,6 +110,10 @@ function buildMainNavSections(
       ]
     }
   ];
+  if (isStoreManagerRole(role)) {
+    return sections.filter((section) => section.title !== "Catalog");
+  }
+  return sections;
 }
 
 const adminNav = [

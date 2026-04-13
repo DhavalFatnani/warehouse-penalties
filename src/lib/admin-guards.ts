@@ -13,7 +13,12 @@ export function assertRoleChangeAllowed(params: {
     throw new HttpError("FORBIDDEN", "Only admins can change roles", 403);
   }
 
-  if (targetRole === "admin" && nextRole === "manager" && targetIsActive && activeAdminCount <= 1) {
+  if (
+    targetRole === "admin" &&
+    nextRole !== "admin" &&
+    targetIsActive &&
+    activeAdminCount <= 1
+  ) {
     throw new HttpError(
       "LAST_ADMIN_GUARD",
       "Cannot demote the last active admin",
