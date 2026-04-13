@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -32,26 +32,44 @@ import {
   SelectTrigger,
   SelectValue
 } from "@/components/ui/select";
+import { useDashboardWarehouse } from "@/components/dashboard-warehouse-context";
+import type { PenaltyCodeApiRow } from "@/lib/penalty-code-row";
+import { warehouseScopeDisplayLabel } from "@/lib/penalty-code-row";
 
 type StaffTypeRow = { id: string; code: string; display_name: string };
-type WarehouseRow = { id: string; code: string; name: string };
-type PenaltyCodeRow = {
+type WarehouseRow = {
   id: string;
   code: string;
-  warehouse_id: string | null;
-  is_active: boolean;
+  name: string;
+  is_active?: boolean;
 };
+type PenaltyCodeRow = PenaltyCodeApiRow;
 type Def = {
   id: string;
   code?: string | null;
   title?: string;
   default_amount?: number | null;
   structure_model?: string;
+  warehouse_id?: string | null;
   warehouse?: { id: string; code: string; name: string } | null;
   staff_types?: { id: string; code: string; display_name: string }[];
 };
 
+function definitionWarehouseLabel(
+  r: Def,
+  lookup: WarehouseRow[]
+): string {
+  if (r.warehouse && (r.warehouse.code || r.warehouse.name)) {
+    return `${r.warehouse.code} — ${r.warehouse.name}`;
+  }
+  if (!r.warehouse_id) return "Global";
+  const w = lookup.find((x) => x.id === r.warehouse_id);
+  if (w && (w.code || w.name)) return `${w.code} — ${w.name}`;
+  return "Inactive or removed site";
+}
+
 export default function PenaltyDefinitionsPage() {
+  const { warehouseId } = useDashboardWarehouse();
   const [rows, setRows] = useState<Def[]>([]);
   const [staffTypes, setStaffTypes] = useState<StaffTypeRow[]>([]);
   const [warehouses, setWarehouses] = useState<WarehouseRow[]>([]);
@@ -62,10 +80,6 @@ export default function PenaltyDefinitionsPage() {
   const [codeOpen, setCodeOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [codeLoading, setCodeLoading] = useState(false);
-  /** "" = all visible; GLOBAL_ONLY = definitions with null warehouse_id; else warehouse uuid */
-  const [listFilterWh, setListFilterWh] = useState<"" | "GLOBAL_ONLY" | string>(
-    ""
-  );
   const [defWarehouseScope, setDefWarehouseScope] = useState<string>("");
   const [penaltyCodeId, setPenaltyCodeId] = useState<string>("");
   const [form, setForm] = useState({
@@ -78,37 +92,27 @@ export default function PenaltyDefinitionsPage() {
     warehouse_scope: "" as "" | "global" | string
   });
 
-  async function loadDefinitions() {
+  const loadDefinitions = useCallback(async () => {
     let q = "";
-    if (listFilterWh === "GLOBAL_ONLY") q = "?globals_only=1";
-    else if (listFilterWh !== "") {
-      q = `?warehouse_id=${encodeURIComponent(listFilterWh)}`;
+    if (warehouseId) {
+      q = `?warehouse_id=${encodeURIComponent(warehouseId)}`;
     }
     const res = await fetch(`/api/penalty-definitions${q}`);
     const json = await res.json();
     setRows((json.data ?? []) as Def[]);
-  }
+  }, [warehouseId]);
 
   async function loadCatalogCodes() {
     const res = await fetch("/api/penalty-codes?include_inactive=true");
     const json = await res.json();
     if (res.ok) {
-      const list = (json.data ?? []) as Record<string, unknown>[];
-      setCatalogCodes(
-        list.map((r) => ({
-          id: String(r.id),
-          code: String(r.code ?? ""),
-          warehouse_id:
-            r.warehouse_id != null ? String(r.warehouse_id) : null,
-          is_active: r.is_active !== false
-        }))
-      );
+      setCatalogCodes((json.data ?? []) as PenaltyCodeRow[]);
     }
   }
 
   useEffect(() => {
     void loadDefinitions();
-  }, [listFilterWh]);
+  }, [loadDefinitions]);
 
   useEffect(() => {
     void fetch("/api/staff-types")
@@ -118,10 +122,18 @@ export default function PenaltyDefinitionsPage() {
         setStaffTypes(list);
         setStaffTypeIds(list.map((s) => s.id));
       });
-    void fetch("/api/warehouses")
+    void fetch("/api/warehouses?include_inactive=true")
       .then((r) => r.json())
       .then((json) => {
-        setWarehouses((json.data ?? []) as WarehouseRow[]);
+        const list = (json.data ?? []) as Record<string, unknown>[];
+        setWarehouses(
+          list.map((w) => ({
+            id: String(w.id),
+            code: String(w.code ?? ""),
+            name: String(w.name ?? ""),
+            is_active: w.is_active !== false
+          }))
+        );
       });
     void loadCatalogCodes();
   }, []);
@@ -277,12 +289,6 @@ export default function PenaltyDefinitionsPage() {
     }
   }
 
-  function warehouseLabel(id: string | null) {
-    if (id == null) return "All sites";
-    const w = warehouses.find((x) => x.id === id);
-    return w ? `${w.code} — ${w.name}` : id;
-  }
-
   async function setCodeActive(id: string, is_active: boolean) {
     const res = await fetch(`/api/penalty-codes/${id}`, {
       method: "PATCH",
@@ -338,7 +344,10 @@ export default function PenaltyDefinitionsPage() {
         </h1>
         <p className="text-sm text-muted-foreground">
           Create <strong>penalty codes</strong> first, then attach definitions
-          (title, amount, staff types) per warehouse or globally.
+          (title, amount, staff types) per warehouse or globally. The definition
+          list follows <span className="font-medium text-foreground">Site scope</span>{" "}
+          in the sidebar (admins: All warehouses = every definition you can
+          access).
         </p>
       </div>
 
@@ -388,7 +397,12 @@ export default function PenaltyDefinitionsPage() {
                         <SelectItem value="global">Global (all warehouses)</SelectItem>
                         {warehouses.map((w) => (
                           <SelectItem key={w.id} value={w.id}>
-                            {w.code} — {w.name}
+                            <span className="font-mono text-xs">{w.code}</span>
+                            <span className="text-muted-foreground">
+                              {" "}
+                              — {w.name}
+                              {w.is_active === false ? " (inactive)" : ""}
+                            </span>
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -444,7 +458,11 @@ export default function PenaltyDefinitionsPage() {
                   <TableRow key={c.id}>
                     <TableCell className="font-mono text-sm">{c.code}</TableCell>
                     <TableCell className="text-muted-foreground text-sm">
-                      {warehouseLabel(c.warehouse_id)}
+                      {warehouseScopeDisplayLabel(
+                        c.warehouse_id,
+                        c.warehouse,
+                        warehouses
+                      )}
                     </TableCell>
                     <TableCell>
                       {c.is_active ? (
@@ -483,37 +501,7 @@ export default function PenaltyDefinitionsPage() {
         </div>
       </div>
 
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div className="space-y-2">
-          <Label className="text-xs text-muted-foreground">Filter definitions</Label>
-          <Select
-            value={
-              listFilterWh === ""
-                ? "all"
-                : listFilterWh === "GLOBAL_ONLY"
-                  ? "global_only"
-                  : listFilterWh
-            }
-            onValueChange={(v) => {
-              if (v === "all") setListFilterWh("");
-              else if (v === "global_only") setListFilterWh("GLOBAL_ONLY");
-              else setListFilterWh(v);
-            }}
-          >
-            <SelectTrigger className="w-[min(100%,280px)]">
-              <SelectValue placeholder="All visible" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All (global + my warehouses)</SelectItem>
-              <SelectItem value="global_only">Global definitions only</SelectItem>
-              {warehouses.map((w) => (
-                <SelectItem key={w.id} value={w.id}>
-                  {w.code} — {w.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+      <div className="flex justify-end">
         <Dialog
           open={open}
           onOpenChange={(v) => {
@@ -552,7 +540,12 @@ export default function PenaltyDefinitionsPage() {
                       </SelectItem>
                       {warehouses.map((w) => (
                         <SelectItem key={w.id} value={w.id}>
-                          {w.code} — {w.name}
+                          <span className="font-mono text-xs">{w.code}</span>
+                          <span className="text-muted-foreground">
+                            {" "}
+                            — {w.name}
+                            {w.is_active === false ? " (inactive)" : ""}
+                          </span>
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -696,9 +689,7 @@ export default function PenaltyDefinitionsPage() {
                     {String(r.title ?? "")}
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
-                    {r.warehouse
-                      ? `${r.warehouse.code} — ${r.warehouse.name}`
-                      : "Global"}
+                    {definitionWarehouseLabel(r, warehouses)}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
                     {r.default_amount != null
@@ -713,7 +704,7 @@ export default function PenaltyDefinitionsPage() {
                           variant="secondary"
                           className="font-normal"
                         >
-                          {st.code}
+                          {st.display_name ?? st.code ?? "—"}
                         </Badge>
                       ))}
                     </div>

@@ -30,7 +30,7 @@ export function WarehousesAccessList() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    void fetch("/api/warehouses")
+    void fetch("/api/warehouses?include_inactive=true")
       .then((r) => r.json())
       .then((json) => setRows((json.data ?? []) as WarehouseRow[]))
       .finally(() => setLoading(false));

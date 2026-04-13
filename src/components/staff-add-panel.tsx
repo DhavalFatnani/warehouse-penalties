@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/select";
 /** Dropdown data for staff forms — prefetched once on the staff hub page. */
 export type StaffPageRefs = {
-  warehouses: { id: string; code: string; name: string }[];
+  warehouses: { id: string; code: string; name: string; is_active?: boolean }[];
   types: { id: string; code: string; display_name: string }[];
 };
 
@@ -30,7 +30,7 @@ type FormState = {
   full_name: string;
   employee_code: string;
   phone: string;
-  warehouse_id: string | null;
+  warehouse_id: string;
   staff_type_id: string;
 };
 
@@ -46,7 +46,7 @@ export function StaffAddPanel({ staffRefs, onStaffAdded }: StaffAddPanelProps) {
     full_name: "",
     employee_code: "",
     phone: "",
-    warehouse_id: null,
+    warehouse_id: "",
     staff_type_id: ""
   });
   const [loading, setLoading] = useState(false);
@@ -59,8 +59,7 @@ export function StaffAddPanel({ staffRefs, onStaffAdded }: StaffAddPanelProps) {
     if (!staffRefs) return;
     setForm((f) => ({
       ...f,
-      warehouse_id:
-        f.warehouse_id ?? (staffRefs.warehouses[0]?.id ?? null),
+      warehouse_id: f.warehouse_id || staffRefs.warehouses[0]?.id || "",
       staff_type_id: f.staff_type_id || staffRefs.types[0]?.id || ""
     }));
   }, [staffRefs]);
@@ -71,7 +70,7 @@ export function StaffAddPanel({ staffRefs, onStaffAdded }: StaffAddPanelProps) {
       toast.error("Select a staff type");
       return;
     }
-    if (warehouses.length > 0 && !form.warehouse_id) {
+    if (!form.warehouse_id) {
       toast.error("Select a warehouse");
       return;
     }
@@ -95,7 +94,7 @@ export function StaffAddPanel({ staffRefs, onStaffAdded }: StaffAddPanelProps) {
         full_name: "",
         employee_code: "",
         phone: "",
-        warehouse_id: warehouses.length ? warehouses[0].id : null,
+        warehouse_id: warehouses.length ? warehouses[0].id : "",
         staff_type_id: types[0]?.id ?? ""
       });
       onStaffAdded?.();
@@ -115,8 +114,8 @@ export function StaffAddPanel({ staffRefs, onStaffAdded }: StaffAddPanelProps) {
       <CardHeader>
         <CardTitle>Details</CardTitle>
         <CardDescription>
-          Enter name, employee ID, optional phone, warehouse, and staff type.
-          Employee ID must be unique per warehouse.
+          Enter name, employee ID, optional phone, required warehouse, and
+          staff type. Employee ID must be unique per warehouse.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -159,7 +158,7 @@ export function StaffAddPanel({ staffRefs, onStaffAdded }: StaffAddPanelProps) {
             <div className="space-y-2">
               <Label>Warehouse</Label>
               <Select
-                value={form.warehouse_id ?? ""}
+                value={form.warehouse_id}
                 onValueChange={(v) =>
                   setForm({ ...form, warehouse_id: v })
                 }
@@ -176,7 +175,12 @@ export function StaffAddPanel({ staffRefs, onStaffAdded }: StaffAddPanelProps) {
                 <SelectContent>
                   {warehouses.map((w) => (
                     <SelectItem key={w.id} value={w.id}>
-                      {w.name}
+                      <span className="font-mono text-xs">{w.code}</span>
+                      <span className="text-muted-foreground">
+                        {" "}
+                        — {w.name}
+                        {w.is_active === false ? " (inactive)" : ""}
+                      </span>
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -228,7 +232,7 @@ export function StaffAddPanel({ staffRefs, onStaffAdded }: StaffAddPanelProps) {
                 loading ||
                 !refsReady ||
                 !form.staff_type_id ||
-                (warehouses.length > 0 && !form.warehouse_id)
+                !form.warehouse_id
               }
             >
               Add staff

@@ -34,7 +34,12 @@ import { Upload, FileSpreadsheet, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { StaffPageRefs } from "@/components/staff-add-panel";
 
-type Warehouse = { id: string; code: string; name: string };
+type Warehouse = {
+  id: string;
+  code: string;
+  name: string;
+  is_active?: boolean;
+};
 type Batch = {
   id: string;
   source_filename: string;
@@ -75,7 +80,7 @@ export function StaffBulkImportPanel({
   const [rows, setRows] = useState<Batch[]>([]);
   const [fileName, setFileName] = useState("staff-upload.csv");
   const [csv, setCsv] = useState(
-    "employee_code,full_name,staff_type_code,phone\nEMP-NEW-001,Test User,PP,+15551234567"
+    "employee_code,full_name,staff_type_code,phone,warehouse_code\nEMP-NEW-001,Test User,PP,+15551234567,DEFAULT"
   );
   const [warehouseId, setWarehouseId] = useState("");
   const [lastSummary, setLastSummary] = useState<Record<
@@ -90,14 +95,9 @@ export function StaffBulkImportPanel({
   const staffTypes = staffRefs?.types ?? [];
 
   async function loadWarehouses() {
-    const res = await fetch("/api/warehouses");
+    const res = await fetch("/api/warehouses?include_inactive=true");
     const json = await res.json();
     setWarehouses(json.data ?? []);
-    setWarehouseId((prev) => {
-      if (prev) return prev;
-      const first = json.data?.[0]?.id;
-      return first ?? "";
-    });
   }
 
   async function loadBatches() {
@@ -119,7 +119,6 @@ export function StaffBulkImportPanel({
       return;
     }
     setWarehouses(staffRefs.warehouses);
-    setWarehouseId((prev) => prev || staffRefs.warehouses[0]?.id || "");
   }, [staffRefs]);
 
   async function loadRowDetails(batchId: string) {
@@ -149,10 +148,6 @@ export function StaffBulkImportPanel({
 
   async function createAndRun(e: FormEvent) {
     e.preventDefault();
-    if (!warehouseId) {
-      toast.error("Select a warehouse");
-      return;
-    }
     setLastError(null);
     setLastSummary(null);
     setLastPreview(null);
@@ -164,7 +159,7 @@ export function StaffBulkImportPanel({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           source_filename: fileName,
-          warehouse_id: warehouseId
+          ...(warehouseId ? { warehouse_id: warehouseId } : {})
         })
       });
       const createdJson = await created.json();
@@ -189,7 +184,7 @@ export function StaffBulkImportPanel({
         body: JSON.stringify({
           batch_id: batchId,
           csv,
-          warehouse_id: warehouseId
+          ...(warehouseId ? { warehouse_id: warehouseId } : {})
         })
       });
       const putJson = await put.json();
@@ -226,7 +221,7 @@ export function StaffBulkImportPanel({
             <div className="space-y-1">
               <CardTitle className="text-base">Bulk add staff</CardTitle>
               <CardDescription>
-                Choose a warehouse, then paste or upload CSV. Required:{" "}
+                Paste or upload CSV. Required:{" "}
                 <code className="rounded bg-muted px-1.5 py-0.5 text-xs">
                   employee_code
                 </code>
@@ -238,7 +233,18 @@ export function StaffBulkImportPanel({
                 <code className="rounded bg-muted px-1.5 py-0.5 text-xs">
                   staff_type_code
                 </code>{" "}
-                (must match a configured type). Optional:{" "}
+                (must match a configured type). Per-row site:{" "}
+                <code className="rounded bg-muted px-1.5 py-0.5 text-xs">
+                  warehouse_code
+                </code>{" "}
+                or{" "}
+                <code className="rounded bg-muted px-1.5 py-0.5 text-xs">
+                  warehouse_id
+                </code>{" "}
+                (UUID). Optional default warehouse below only fills rows that omit
+                both; if every row has a site column, pick{" "}
+                <span className="font-medium text-foreground">No default</span>.
+                Optional:{" "}
                 <code className="rounded bg-muted px-1.5 py-0.5 text-xs">
                   phone
                 </code>
@@ -261,19 +267,28 @@ export function StaffBulkImportPanel({
                 />
               </div>
               <div className="space-y-2">
-                <Label>Warehouse</Label>
+                <Label>Default warehouse (optional)</Label>
                 <Select
-                  value={warehouseId}
-                  onValueChange={setWarehouseId}
-                  required
+                  value={warehouseId || "__no_default_wh__"}
+                  onValueChange={(v) =>
+                    setWarehouseId(v === "__no_default_wh__" ? "" : v)
+                  }
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select warehouse" />
+                    <SelectValue placeholder="No default — CSV per row" />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="__no_default_wh__">
+                      No default — use warehouse per CSV row only
+                    </SelectItem>
                     {warehouses.map((w) => (
                       <SelectItem key={w.id} value={w.id}>
-                        {w.code} — {w.name}
+                        <span className="font-mono text-xs">{w.code}</span>
+                        <span className="text-muted-foreground">
+                          {" "}
+                          — {w.name}
+                          {w.is_active === false ? " (inactive)" : ""}
+                        </span>
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -302,7 +317,7 @@ export function StaffBulkImportPanel({
                 value={csv}
                 onChange={(e) => setCsv(e.target.value)}
                 className="min-h-[200px] resize-y font-mono text-sm"
-                placeholder="employee_code,full_name,staff_type_code,phone"
+                placeholder="employee_code,full_name,staff_type_code,phone,warehouse_code"
               />
             </div>
 
@@ -327,7 +342,7 @@ export function StaffBulkImportPanel({
               )}
             </div>
 
-            <Button type="submit" disabled={submitting || !warehouseId}>
+            <Button type="submit" disabled={submitting}>
               <FileSpreadsheet className="mr-2 h-4 w-4" />
               {submitting ? "Processing…" : "Create batch & commit valid rows"}
             </Button>
@@ -442,7 +457,14 @@ export function StaffBulkImportPanel({
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Row validation</CardTitle>
-            <CardDescription>Batch ID: {rowDetailBatch}</CardDescription>
+            <CardDescription>
+              {(() => {
+                const meta = rows.find((x) => x.id === rowDetailBatch);
+                return meta?.source_filename
+                  ? `Batch: ${meta.source_filename}`
+                  : "Row validation details";
+              })()}
+            </CardDescription>
           </CardHeader>
           <CardContent className="p-0">
             <Table>

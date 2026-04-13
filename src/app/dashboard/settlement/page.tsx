@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -34,7 +34,10 @@ import {
 } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
-import { CalendarRange, ChevronDown, Download, Layers, ListFilter } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { ChevronDown, Download, RefreshCw } from "lucide-react";
+import { useDashboardWarehouse } from "@/components/dashboard-warehouse-context";
+import { cn } from "@/lib/utils";
 
 type Row = Record<string, unknown>;
 
@@ -55,7 +58,6 @@ type PreviewGroup = {
   records: Row[];
 };
 
-type WarehouseOpt = { id: string; code: string; name: string };
 type StaffTypeOpt = { id: string; code: string; display_name: string };
 type StaffOpt = {
   id: string;
@@ -64,13 +66,13 @@ type StaffOpt = {
 };
 
 export default function SettlementPage() {
+  const { warehouseId, warehouses, userRole } = useDashboardWarehouse();
   const [from, setFrom] = useState(() => {
     const d = new Date();
     d.setDate(1);
     return d.toISOString().slice(0, 10);
   });
   const [to, setTo] = useState(() => new Date().toISOString().slice(0, 10));
-  const [warehouseId, setWarehouseId] = useState("");
   const [staffId, setStaffId] = useState("");
   const [staffTypeId, setStaffTypeId] = useState("");
   const [groupBy, setGroupBy] = useState<"staff" | "staff_type" | "warehouse">(
@@ -85,26 +87,40 @@ export default function SettlementPage() {
   const [groups, setGroups] = useState<PreviewGroup[]>([]);
   const [recordIds, setRecordIds] = useState<string[]>([]);
 
-  const [warehouses, setWarehouses] = useState<WarehouseOpt[]>([]);
   const [staffTypes, setStaffTypes] = useState<StaffTypeOpt[]>([]);
   const [staffList, setStaffList] = useState<StaffOpt[]>([]);
 
   useEffect(() => {
     void (async () => {
       try {
-        const [w, t, s] = await Promise.all([
-          fetch("/api/warehouses").then((r) => r.json()),
-          fetch("/api/staff-types").then((r) => r.json()),
-          fetch("/api/staff?is_active=true").then((r) => r.json())
-        ]);
-        if (w.data) setWarehouses(w.data);
+        const t = await fetch("/api/staff-types").then((r) => r.json());
         if (t.data) setStaffTypes(t.data);
-        if (s.data) setStaffList(s.data);
       } catch {
         /* ignore */
       }
     })();
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    setStaffId("");
+    const p = new URLSearchParams();
+    p.set("is_active", "true");
+    if (warehouseId) p.set("warehouse_id", warehouseId);
+    void fetch(`/api/staff?${p}`)
+      .then((r) => r.json())
+      .then((s) => {
+        if (cancelled) return;
+        if (s.data) setStaffList(s.data);
+        else setStaffList([]);
+      })
+      .catch(() => {
+        if (!cancelled) setStaffList([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [warehouseId]);
 
   const loadPreview = useCallback(async () => {
     setLoading(true);
@@ -147,6 +163,69 @@ export default function SettlementPage() {
   useEffect(() => {
     void loadPreview();
   }, [loadPreview]);
+
+  const siteLabel = useMemo(() => {
+    if (!warehouseId) {
+      return userRole === "admin"
+        ? "All warehouses"
+        : "All sites you can access";
+    }
+    const w = warehouses.find((x) => x.id === warehouseId);
+    return w ? `${w.code} — ${w.name}` : "Current site scope";
+  }, [warehouseId, warehouses, userRole]);
+
+  const selectedStaffTypeLabel = useMemo(() => {
+    if (!staffTypeId) return null;
+    return staffTypes.find((t) => t.id === staffTypeId)?.display_name ?? null;
+  }, [staffTypeId, staffTypes]);
+
+  const selectedStaffLabel = useMemo(() => {
+    if (!staffId) return null;
+    const s = staffList.find((x) => x.id === staffId);
+    if (!s) return null;
+    return s.employee_code
+      ? `${s.full_name} (${s.employee_code})`
+      : s.full_name;
+  }, [staffId, staffList]);
+
+  const dateRangeLabel = useMemo(() => {
+    if (allTime) return "All incident dates";
+    return `${formatDateLabel(from)} → ${formatDateLabel(to)}`;
+  }, [allTime, from, to]);
+
+  const statusLabel =
+    statusFilter === "created"
+      ? "Pending settlement"
+      : statusFilter === "settled"
+        ? "Settled only"
+        : "All statuses";
+
+  const groupByLabel =
+    groupBy === "staff"
+      ? "Staff"
+      : groupBy === "staff_type"
+        ? "Staff type"
+        : "Warehouse";
+
+  const metrics = useMemo(() => {
+    let totalAmount = 0;
+    let totalRecords = 0;
+    const staffIds = new Set<string>();
+    for (const g of groups) {
+      totalAmount += g.total;
+      totalRecords += g.count;
+      for (const r of g.records) {
+        const sid = String(r.staff_id ?? "");
+        if (sid) staffIds.add(sid);
+      }
+    }
+    return {
+      totalAmount,
+      totalRecords,
+      groupCount: groups.length,
+      distinctStaff: staffIds.size
+    };
+  }, [groups]);
 
   async function settleAll() {
     if (statusFilter !== "created") {
@@ -236,106 +315,114 @@ export default function SettlementPage() {
         : "By warehouse";
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
+    <div className="mx-auto w-full max-w-[min(100%,72rem)] space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Settlement</h1>
         <p className="text-sm text-muted-foreground">
-          Preview penalties by <span className="font-medium">status</span> and
-          incident date (or all time), grouped for payroll.{" "}
-          <span className="font-medium">Export CSV</span> matches the current
-          filters. Pending-only rows can be marked settled in bulk.
+          Match payroll to penalties: filter by status and incident dates, then
+          review totals. Site scope comes from the sidebar; CSV export uses the
+          same filters as the preview (up to 5,000 rows). Bulk settle applies
+          only while status is pending.
         </p>
       </div>
 
-      <Card className="overflow-hidden">
-        <CardHeader className="border-b bg-muted/40 pb-4">
-          <CardTitle className="text-base">Settlement filters</CardTitle>
-          <CardDescription className="max-w-2xl">
-            Tune the preview and CSV export (same query, up to 5,000 rows).
-            Bulk settle is only available for pending records.
-          </CardDescription>
+      <Card className="overflow-hidden shadow-sm">
+        <CardHeader className="border-b bg-muted/30 px-3 py-2 sm:px-4">
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <CardTitle className="text-sm font-semibold">
+                Filters &amp; preview
+              </CardTitle>
+              <CardDescription className="text-[11px] leading-snug">
+                Preview updates as you change filters. Site:{" "}
+                <span className="font-medium text-foreground">{siteLabel}</span>
+              </CardDescription>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={loading}
+              onClick={() => void loadPreview()}
+              className="h-8 shrink-0 gap-1 px-2 text-xs"
+            >
+              <RefreshCw
+                className={cn("h-3 w-3", loading && "animate-spin")}
+                aria-hidden
+              />
+              {loading ? "…" : "Refresh"}
+            </Button>
+          </div>
         </CardHeader>
-        <CardContent className="space-y-0 p-0">
-          {/* Time range */}
-          <div className="space-y-4 p-5 sm:p-6">
-            <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-              <CalendarRange className="h-4 w-4 text-muted-foreground" aria-hidden />
-              Incident date
-            </div>
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch lg:justify-between">
-              <div className="grid grid-cols-2 gap-3 sm:max-w-md">
-                <div className="space-y-1.5">
-                  <Label htmlFor="settle-from" className="text-xs text-muted-foreground">
-                    From
-                  </Label>
-                  <Input
-                    id="settle-from"
-                    type="date"
-                    value={from}
-                    disabled={allTime}
-                    onChange={(e) => setFrom(e.target.value)}
-                    className="bg-background"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="settle-to" className="text-xs text-muted-foreground">
-                    To
-                  </Label>
-                  <Input
-                    id="settle-to"
-                    type="date"
-                    value={to}
-                    disabled={allTime}
-                    onChange={(e) => setTo(e.target.value)}
-                    className="bg-background"
-                  />
-                </div>
+        <CardContent className="space-y-2 p-3 sm:p-4">
+          {/* Dates + all-time */}
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
+            <div className="grid grid-cols-2 gap-2 sm:max-w-[17rem]">
+              <div className="space-y-0.5">
+                <Label
+                  htmlFor="settle-from"
+                  className="text-[10px] uppercase tracking-wide text-muted-foreground"
+                >
+                  From
+                </Label>
+                <Input
+                  id="settle-from"
+                  type="date"
+                  value={from}
+                  disabled={allTime}
+                  onChange={(e) => setFrom(e.target.value)}
+                  className="h-8 bg-background text-xs"
+                />
               </div>
-              <div
-                className={`flex flex-1 items-center rounded-lg border px-4 py-3 lg:max-w-sm ${
-                  allTime
-                    ? "border-primary/30 bg-primary/5"
-                    : "border-border bg-muted/30"
-                }`}
-              >
-                <div className="flex items-start gap-3">
-                  <Checkbox
-                    id="all-time"
-                    checked={allTime}
-                    onCheckedChange={(c) => setAllTime(c === true)}
-                    className="mt-0.5"
-                  />
-                  <div className="space-y-0.5">
-                    <Label htmlFor="all-time" className="cursor-pointer font-medium leading-none">
-                      All time
-                    </Label>
-                    <p className="text-xs text-muted-foreground">
-                      Ignore From / To and include every incident date.
-                    </p>
-                  </div>
-                </div>
+              <div className="space-y-0.5">
+                <Label
+                  htmlFor="settle-to"
+                  className="text-[10px] uppercase tracking-wide text-muted-foreground"
+                >
+                  To
+                </Label>
+                <Input
+                  id="settle-to"
+                  type="date"
+                  value={to}
+                  disabled={allTime}
+                  onChange={(e) => setTo(e.target.value)}
+                  className="h-8 bg-background text-xs"
+                />
               </div>
             </div>
+            <label
+              className={cn(
+                "flex cursor-pointer items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs sm:ml-0",
+                allTime
+                  ? "border-primary/40 bg-primary/[0.06]"
+                  : "border-transparent bg-muted/40"
+              )}
+            >
+              <Checkbox
+                id="all-time"
+                checked={allTime}
+                onCheckedChange={(c) => setAllTime(c === true)}
+                className="h-3.5 w-3.5"
+              />
+              <span className="font-medium leading-none">All time</span>
+            </label>
           </div>
 
-          <Separator />
-
-          {/* Scope */}
-          <div className="space-y-4 p-5 sm:p-6">
-            <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-              <ListFilter className="h-4 w-4 text-muted-foreground" aria-hidden />
-              Record scope
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Status</Label>
+          {/* Filters row */}
+          <div className="flex flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-end">
+            <div className="grid flex-1 grid-cols-2 gap-2 min-[520px]:grid-cols-4">
+              <div className="space-y-0.5">
+                <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                  Status
+                </Label>
                 <Select
                   value={statusFilter}
                   onValueChange={(v) =>
                     setStatusFilter(v as "created" | "settled" | "all")
                   }
                 >
-                  <SelectTrigger className="bg-background">
+                  <SelectTrigger className="h-8 bg-background text-xs">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -345,32 +432,15 @@ export default function SettlementPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Warehouse</Label>
-                <Select
-                  value={warehouseId || "all"}
-                  onValueChange={(v) => setWarehouseId(v === "all" ? "" : v)}
-                >
-                  <SelectTrigger className="bg-background">
-                    <SelectValue placeholder="All warehouses" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All warehouses</SelectItem>
-                    {warehouses.map((w) => (
-                      <SelectItem key={w.id} value={w.id}>
-                        {w.code} — {w.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Staff type</Label>
+              <div className="space-y-0.5">
+                <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                  Staff type
+                </Label>
                 <Select
                   value={staffTypeId || "all"}
                   onValueChange={(v) => setStaffTypeId(v === "all" ? "" : v)}
                 >
-                  <SelectTrigger className="bg-background">
+                  <SelectTrigger className="h-8 bg-background text-xs">
                     <SelectValue placeholder="All types" />
                   </SelectTrigger>
                   <SelectContent>
@@ -383,13 +453,15 @@ export default function SettlementPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Staff</Label>
+              <div className="col-span-2 space-y-0.5 min-[520px]:col-span-2">
+                <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                  Staff
+                </Label>
                 <Select
                   value={staffId || "all"}
                   onValueChange={(v) => setStaffId(v === "all" ? "" : v)}
                 >
-                  <SelectTrigger className="bg-background">
+                  <SelectTrigger className="h-8 bg-background text-xs">
                     <SelectValue placeholder="All staff" />
                   </SelectTrigger>
                   <SelectContent>
@@ -403,32 +475,17 @@ export default function SettlementPage() {
                   </SelectContent>
                 </Select>
               </div>
-            </div>
-          </div>
-
-          <Separator />
-
-          {/* Grouping */}
-          <div className="space-y-4 p-5 sm:px-6 sm:pb-6 sm:pt-4">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-                  <Layers className="h-4 w-4 text-muted-foreground" aria-hidden />
-                  Preview grouping
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  How rows are rolled up in the list below.
-                </p>
-              </div>
-              <div className="w-full space-y-1.5 sm:w-56">
-                <Label className="text-xs text-muted-foreground">Group by</Label>
+              <div className="col-span-2 space-y-0.5 min-[520px]:col-span-1">
+                <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                  Group by
+                </Label>
                 <Select
                   value={groupBy}
                   onValueChange={(v) =>
                     setGroupBy(v as "staff" | "staff_type" | "warehouse")
                   }
                 >
-                  <SelectTrigger className="bg-background">
+                  <SelectTrigger className="h-8 bg-background text-xs">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -441,41 +498,102 @@ export default function SettlementPage() {
             </div>
           </div>
 
-          <Separator />
+          {/* Compact metrics */}
+          <div
+            className={cn(
+              "flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-border/60 bg-muted/30 px-2.5 py-1.5 text-[11px]",
+              loading && "opacity-60"
+            )}
+          >
+            <span className="text-muted-foreground">
+              {loading ? "Updating…" : "Preview"}
+            </span>
+            <span className="hidden h-3 w-px bg-border sm:block" aria-hidden />
+            <span className="text-muted-foreground">Rows</span>
+            <span className="font-semibold tabular-nums text-foreground">
+              {metrics.totalRecords}
+            </span>
+            <span className="text-border">·</span>
+            <span className="text-muted-foreground">Total</span>
+            <span className="font-semibold tabular-nums text-foreground">
+              {formatMoney(metrics.totalAmount)}
+            </span>
+            <span className="text-border">·</span>
+            <span className="text-muted-foreground">Groups</span>
+            <span className="font-semibold tabular-nums text-foreground">
+              {metrics.groupCount}
+            </span>
+            <span className="text-border">·</span>
+            <span className="text-muted-foreground">Staff</span>
+            <span className="font-semibold tabular-nums text-foreground">
+              {metrics.distinctStaff}
+            </span>
+          </div>
 
-          {/* Actions */}
-          <div className="flex flex-col gap-3 bg-muted/20 p-5 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-4">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={loading}
-              onClick={() => void loadPreview()}
-              className="w-full sm:w-auto"
-            >
-              {loading ? "Loading…" : "Refresh preview"}
-            </Button>
-            <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+          {statusFilter === "created" && recordIds.length > 0 ? (
+            <p className="text-[11px] text-emerald-700 dark:text-emerald-400/90">
+              <span className="font-semibold tabular-nums">{recordIds.length}</span>{" "}
+              pending row{recordIds.length === 1 ? "" : "s"} will be settled in bulk.
+            </p>
+          ) : statusFilter === "created" && !loading && metrics.totalRecords === 0 ? (
+            <p className="text-[11px] text-muted-foreground">
+              No pending rows — widen dates or relax filters.
+            </p>
+          ) : null}
+
+          <div className="flex flex-wrap gap-1">
+            <Badge variant="secondary" className="h-5 px-1.5 text-[10px] font-normal">
+              {statusLabel}
+            </Badge>
+            <Badge variant="outline" className="h-5 max-w-[14rem] truncate px-1.5 text-[10px] font-normal">
+              {dateRangeLabel}
+            </Badge>
+            <Badge variant="outline" className="h-5 max-w-[12rem] truncate px-1.5 text-[10px] font-normal">
+              {siteLabel}
+            </Badge>
+            <Badge variant="outline" className="h-5 px-1.5 text-[10px] font-normal">
+              {groupByLabel}
+            </Badge>
+            {selectedStaffTypeLabel ? (
+              <Badge variant="outline" className="h-5 max-w-[10rem] truncate px-1.5 text-[10px] font-normal">
+                {selectedStaffTypeLabel}
+              </Badge>
+            ) : null}
+            {selectedStaffLabel ? (
+              <Badge variant="outline" className="h-5 max-w-[12rem] truncate px-1.5 text-[10px] font-normal">
+                {selectedStaffLabel}
+              </Badge>
+            ) : null}
+          </div>
+
+          <Separator className="my-1" />
+
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-[11px] text-muted-foreground">
+              CSV matches preview. Settle only while status is pending.
+            </p>
+            <div className="flex flex-wrap gap-2">
               <Button
                 type="button"
+                size="sm"
+                className="h-8 text-xs"
                 onClick={() => void settleAll()}
                 disabled={
                   loading ||
                   !recordIds.length ||
                   statusFilter !== "created"
                 }
-                className="w-full sm:w-auto"
               >
-                Mark all as settled
+                Mark all settled
               </Button>
               <Button
                 type="button"
                 variant="secondary"
-                size="default"
-                className="w-full sm:w-auto"
+                size="sm"
+                className="h-8 text-xs"
                 onClick={downloadCsv}
               >
-                <Download className="mr-2 h-4 w-4" />
+                <Download className="mr-1.5 h-3.5 w-3.5" />
                 Export CSV
               </Button>
             </div>
@@ -483,17 +601,26 @@ export default function SettlementPage() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
+      <Card className="shadow-sm">
+        <CardHeader className="border-b bg-muted/20 px-4 py-3">
           <CardTitle className="text-base">{groupSectionTitle}</CardTitle>
-          <CardDescription>
-            {groups.length}{" "}
-            {groupBy === "staff"
-              ? "staff with open penalties"
-              : groupBy === "staff_type"
-                ? "groups"
-                : "warehouses"}{" "}
-            in current filters
+          <CardDescription className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="tabular-nums font-medium text-foreground">
+              {metrics.groupCount}
+            </span>
+            <span>
+              {groupBy === "staff"
+                ? "staff buckets"
+                : groupBy === "staff_type"
+                  ? "type buckets"
+                  : "warehouse buckets"}
+            </span>
+            <span className="text-border">·</span>
+            <span className="tabular-nums">{metrics.totalRecords}</span>
+            <span>penalties</span>
+            <span className="text-border">·</span>
+            <span>{formatMoney(metrics.totalAmount)}</span>
+            <span>combined</span>
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-2">
@@ -565,4 +692,29 @@ function formatMoney(n: number) {
     currency: "INR",
     maximumFractionDigits: 0
   }).format(n);
+}
+
+function formatDateLabel(isoDate: string) {
+  const parts = isoDate.split("-");
+  if (parts.length !== 3) return isoDate;
+  const [year, month, day] = parts;
+  const monthIdx = Number(month) - 1;
+  const dayNum = Number(day);
+  if (!Number.isInteger(monthIdx) || monthIdx < 0 || monthIdx > 11) return isoDate;
+  if (!Number.isInteger(dayNum)) return isoDate;
+  const months = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec"
+  ];
+  return `${months[monthIdx]} ${dayNum}, ${year}`;
 }

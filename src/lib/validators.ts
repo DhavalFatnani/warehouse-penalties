@@ -40,7 +40,7 @@ export const warehousePatchSchema = z
   .refine((d) => Object.keys(d).length > 0, "No fields to update");
 
 export const staffCreateSchema = z.object({
-  warehouse_id: z.string().uuid().nullable().optional(),
+  warehouse_id: z.string().uuid(),
   staff_type_id: z.string().uuid(),
   employee_code: z.string().min(1),
   full_name: z.string().min(1),
@@ -56,7 +56,8 @@ export const staffPatchSchema = z
   .object({
     full_name: z.string().min(1).optional(),
     employee_code: z.string().min(1).optional(),
-    warehouse_id: z.string().uuid().nullable().optional(),
+    /** Omit to leave unchanged; must not be set to null — staff always has a warehouse. */
+    warehouse_id: z.string().uuid().optional(),
     staff_type_id: z.string().uuid().optional(),
     is_active: z.boolean().optional(),
     phone: optionalTrimmedPhone
@@ -133,19 +134,36 @@ export const penaltyRecordCreateSchema = z
     }
   });
 
+export type PenaltyRecordCreateParsed = z.infer<
+  typeof penaltyRecordCreateSchema
+>;
+
+export const penaltyRecordImportSchema = z.object({
+  /** Default site when a row omits warehouse_id / warehouse_code. */
+  warehouse_id: z.string().uuid().optional(),
+  csv: z.string().min(1)
+});
+
 export const penaltyRecordSettleSchema = z.object({
   record_ids: z.array(z.string().uuid()).min(1)
 });
 
+/** Staff import: omit / null / "" = no default site (each row must set warehouse_code or warehouse_id). */
+const optionalWarehouseIdForImport = z.preprocess((v) => {
+  if (v === undefined || v === null) return undefined;
+  if (typeof v === "string" && v.trim() === "") return undefined;
+  return v;
+}, z.string().uuid().optional());
+
 export const importBatchCreateSchema = z.object({
   source_filename: z.string().min(1),
-  warehouse_id: z.string().uuid()
+  warehouse_id: optionalWarehouseIdForImport
 });
 
 export const importCommitSchema = z.object({
   batch_id: z.string().uuid(),
   csv: z.string().min(1),
-  warehouse_id: z.string().uuid()
+  warehouse_id: optionalWarehouseIdForImport
 });
 
 export const settlementPreviewQuerySchema = z.object({

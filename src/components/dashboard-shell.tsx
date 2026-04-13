@@ -20,6 +20,7 @@ import {
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import type { AppRole } from "@/lib/auth";
 import { cn } from "@/lib/utils";
+import { DashboardWarehouseSelect } from "@/components/dashboard-warehouse-context";
 
 function isEditableTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
@@ -77,57 +78,61 @@ export function DashboardShell({
 
   return (
     <div className="flex min-h-[100dvh] w-full">
-      <aside className="hidden w-[240px] shrink-0 md:block lg:w-[260px]">
-        <div className="sticky top-0 h-[100dvh]">
-          <SidebarPanel role={role} />
-        </div>
-      </aside>
-
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header
-          className={cn(
-            "sticky top-0 z-30 flex h-14 shrink-0 items-center gap-3 border-b border-border/80 bg-background/80 px-4 backdrop-blur-md",
-            "md:hidden"
-          )}
-        >
-          <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-            <SheetTrigger asChild>
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                className="shrink-0 transition-transform duration-200 active:scale-95"
-                aria-label="Open navigation menu"
-              >
-                <Menu className="h-5 w-5" aria-hidden />
-              </Button>
-            </SheetTrigger>
-            <SheetContent
-              side="left"
-              className="w-[min(100vw-2rem,18rem)] border-sidebar-border bg-sidebar p-0 [&>button]:text-sidebar-foreground"
-            >
-              <SidebarPanel role={role} onNavigate={() => setMobileOpen(false)} />
-            </SheetContent>
-          </Sheet>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold tracking-tight">
-              Warehouse payroll
-            </p>
-            <p className="truncate text-[11px] text-muted-foreground">
-              Operations
-            </p>
+        <aside className="hidden w-[240px] shrink-0 overflow-x-hidden md:block lg:w-[260px]">
+          <div className="sticky top-0 h-[100dvh] min-w-0">
+            <SidebarPanel role={role} />
           </div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="shrink-0 text-muted-foreground"
-            aria-label="Keyboard shortcuts"
-            onClick={() => setShortcutsOpen(true)}
+        </aside>
+
+        <div className="flex min-w-0 flex-1 flex-col">
+          <header
+            className={cn(
+              "sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b border-border/80 bg-background/80 px-3 backdrop-blur-md",
+              "md:hidden"
+            )}
           >
-            <Keyboard className="h-5 w-5" aria-hidden />
-          </Button>
-        </header>
+            <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+              <SheetTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="shrink-0 transition-transform duration-200 active:scale-95"
+                  aria-label="Open navigation menu"
+                >
+                  <Menu className="h-5 w-5" aria-hidden />
+                </Button>
+              </SheetTrigger>
+              <SheetContent
+                side="left"
+                className="w-[min(100vw-2rem,18rem)] border-sidebar-border bg-sidebar p-0 [&>button]:text-sidebar-foreground"
+              >
+                <SidebarPanel
+                  role={role}
+                  onNavigate={() => setMobileOpen(false)}
+                />
+              </SheetContent>
+            </Sheet>
+            <DashboardWarehouseSelect compact className="min-w-0 shrink" />
+            <div className="min-w-0 flex-1 text-right">
+              <p className="truncate text-sm font-semibold tracking-tight">
+                Warehouse payroll
+              </p>
+              <p className="truncate text-[11px] text-muted-foreground">
+                Operations
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="shrink-0 text-muted-foreground"
+              aria-label="Keyboard shortcuts"
+              onClick={() => setShortcutsOpen(true)}
+            >
+              <Keyboard className="h-5 w-5" aria-hidden />
+            </Button>
+          </header>
 
         <main className="flex-1 overflow-auto px-4 py-6 sm:px-6 md:px-8 md:py-8">
           <div key={pathname} className="animate-fade-up">

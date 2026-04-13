@@ -23,8 +23,10 @@ import { StaffSearchCombobox } from "@/components/staff-search-combobox";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
+import { useDashboardWarehouse } from "@/components/dashboard-warehouse-context";
 
 type StaffRow = { id: string; full_name: string; employee_code: string };
+type WarehouseRow = { id: string; code: string; name: string };
 type DefRow = {
   id: string;
   title: string;
@@ -33,6 +35,12 @@ type DefRow = {
 };
 
 export default function ApplyPenaltyPage() {
+  const {
+    warehouseId,
+    warehouses,
+    warehousesLoading,
+    userRole
+  } = useDashboardWarehouse();
   const [staff, setStaff] = useState<StaffRow[]>([]);
   const [defs, setDefs] = useState<DefRow[]>([]);
   const [staffId, setStaffId] = useState("");
@@ -46,10 +54,30 @@ export default function ApplyPenaltyPage() {
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
 
+  const selectedWarehouse = useMemo((): WarehouseRow | null => {
+    if (!warehouseId) return null;
+    return warehouses.find((w) => w.id === warehouseId) ?? null;
+  }, [warehouseId, warehouses]);
+
   useEffect(() => {
-    void fetch("/api/staff")
+    if (!warehouseId) {
+      setStaff([]);
+      setStaffId("");
+      setDefs([]);
+      setDefId("");
+      return;
+    }
+    setStaff([]);
+    setStaffId("");
+    setDefs([]);
+    setDefId("");
+    let cancelled = false;
+    const qs = new URLSearchParams();
+    qs.set("warehouse_id", warehouseId);
+    void fetch(`/api/staff?${qs.toString()}`)
       .then((r) => r.json())
       .then((staffJson) => {
+        if (cancelled) return;
         const list = (staffJson.data ?? []) as Record<string, unknown>[];
         setStaff(
           list.map((r) => ({
@@ -59,7 +87,10 @@ export default function ApplyPenaltyPage() {
           }))
         );
       });
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [warehouseId]);
 
   useEffect(() => {
     if (!staffId) {
@@ -101,6 +132,14 @@ export default function ApplyPenaltyPage() {
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
+    if (!warehouseId) {
+      toast.error(
+        userRole === "admin"
+          ? "Choose a site in Site scope (sidebar)"
+          : "Select a warehouse"
+      );
+      return;
+    }
     if (!staffId || !defId) {
       toast.error("Select staff and penalty type");
       return;
@@ -165,6 +204,9 @@ export default function ApplyPenaltyPage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Apply penalty</h1>
         <p className="text-sm text-muted-foreground">
+          Site comes from{" "}
+          <span className="font-medium text-foreground">Site scope</span> in the
+          sidebar. Then pick staff — penalties are recorded for that warehouse.
           Fast entry —{" "}
           <kbd className="rounded border bg-muted px-1.5 py-0.5 text-xs font-mono">
             ⌘
@@ -183,11 +225,41 @@ export default function ApplyPenaltyPage() {
           <CardDescription>
             Creates a record with status{" "}
             <span className="font-medium text-foreground">created</span> (open
-            for settlement).
+            for settlement), scoped to the warehouse you pick.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form id="apply-penalty-form" className="space-y-4" onSubmit={onSubmit}>
+            <div className="space-y-2 rounded-lg border bg-muted/20 p-3">
+              <Label className="text-xs text-muted-foreground">Site scope</Label>
+              {warehousesLoading ? (
+                <p className="text-sm text-muted-foreground">Loading sites…</p>
+              ) : userRole === "admin" && !warehouseId ? (
+                <p className="text-sm text-amber-800 dark:text-amber-200">
+                  Select a warehouse under{" "}
+                  <span className="font-medium">Site scope</span> in the sidebar
+                  to apply penalties.
+                </p>
+              ) : selectedWarehouse ? (
+                <p className="text-sm font-medium">
+                  <span className="font-mono text-xs">{selectedWarehouse.code}</span>
+                  <span className="text-muted-foreground font-normal">
+                    {" "}
+                    — {selectedWarehouse.name}
+                  </span>
+                </p>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No site selected. Use the sidebar to choose a warehouse.
+                </p>
+              )}
+              {warehouseId && staff.length === 0 && !warehousesLoading ? (
+                <p className="text-xs text-muted-foreground">
+                  No active staff at this site. Add people under Staff.
+                </p>
+              ) : null}
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="staff">Staff</Label>
               <StaffSearchCombobox
@@ -195,7 +267,17 @@ export default function ApplyPenaltyPage() {
                 staff={staff}
                 value={staffId}
                 onValueChange={setStaffId}
-                placeholder="Type to search, then select…"
+                disabled={!warehouseId}
+                placeholder={
+                  warehouseId
+                    ? "Type to search, then select…"
+                    : "Select warehouse first"
+                }
+                emptyText={
+                  warehouseId
+                    ? "No staff at this warehouse match your search."
+                    : "Select a warehouse first."
+                }
               />
             </div>
 

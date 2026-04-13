@@ -4,6 +4,10 @@ import { adminClient } from "@/lib/supabase/admin";
 import { HttpError, jsonOk, toErrorResponse } from "@/lib/http";
 import { penaltyCodePatchSchema } from "@/lib/validators";
 import { assertWarehouseAccess } from "@/lib/warehouse-access";
+import {
+  normalizePenaltyCodeRow,
+  PENALTY_CODE_SELECT
+} from "@/lib/penalty-code-row";
 
 export async function PATCH(
   req: NextRequest,
@@ -34,11 +38,11 @@ export async function PATCH(
       .from("penalty_codes")
       .update({ is_active: parsed.data.is_active })
       .eq("id", params.id)
-      .select("id, code, warehouse_id, created_at, is_active")
+      .select(PENALTY_CODE_SELECT)
       .single();
 
     if (error) throw new Error(error.message);
-    return jsonOk(data);
+    return jsonOk(normalizePenaltyCodeRow(data as Record<string, unknown>));
   } catch (e) {
     return toErrorResponse(e);
   }

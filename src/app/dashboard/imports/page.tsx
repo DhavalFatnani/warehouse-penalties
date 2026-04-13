@@ -1,3 +1,5 @@
+import { PenaltyBulkImportPanel } from "@/components/penalty-bulk-import-panel";
+
 export default function PenaltyImportsPage() {
   return (
     <div className="mx-auto max-w-2xl space-y-4">
@@ -6,15 +8,10 @@ export default function PenaltyImportsPage() {
           Penalty imports
         </h1>
         <p className="text-sm text-muted-foreground">
-          Bulk import of penalty records (CSV) will be added here in a future
-          update.
+          Bulk import of penalty records (CSV).
         </p>
       </div>
-      <p className="text-sm text-muted-foreground">
-        For now, use <span className="text-foreground">Apply penalty</span> or{" "}
-        <span className="text-foreground">Penalty records</span> to manage
-        penalties.
-      </p>
+      <PenaltyBulkImportPanel />
     </div>
   );
 }

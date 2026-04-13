@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
+import { Suspense } from "react";
 import { getCurrentAppUser } from "@/lib/auth";
-import { DashboardShell } from "@/components/dashboard-shell";
+import { DashboardWithWarehouse } from "@/components/dashboard-with-warehouse";
 
 export default async function DashboardLayout({
   children
@@ -9,5 +10,17 @@ export default async function DashboardLayout({
 }) {
   const { appUser } = await getCurrentAppUser();
 
-  return <DashboardShell role={appUser.role}>{children}</DashboardShell>;
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-[100dvh] items-center justify-center bg-background text-sm text-muted-foreground">
+          Loading dashboard…
+        </div>
+      }
+    >
+      <DashboardWithWarehouse role={appUser.role}>
+        {children}
+      </DashboardWithWarehouse>
+    </Suspense>
+  );
 }

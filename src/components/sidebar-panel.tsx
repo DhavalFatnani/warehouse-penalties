@@ -2,7 +2,7 @@
 
 import type { ComponentType } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   ClipboardList,
@@ -24,6 +24,11 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import type { AppRole } from "@/lib/auth";
+import {
+  appendWarehouseToHref,
+  DashboardWarehouseSelect,
+  useDashboardWarehouseOptional
+} from "@/components/dashboard-warehouse-context";
 
 type MePayload = {
   id: string;
@@ -138,7 +143,7 @@ export function SidebarPanel({
   return (
     <div
       className={cn(
-        "flex h-full min-h-0 w-full max-w-[17rem] flex-col border-sidebar-border bg-sidebar text-sidebar-foreground md:border-r",
+        "flex h-full min-h-0 w-full min-w-0 max-w-[17rem] flex-col border-sidebar-border bg-sidebar text-sidebar-foreground md:border-r",
         className
       )}
     >
@@ -155,6 +160,7 @@ export function SidebarPanel({
           </div>
         </div>
       </div>
+      <DashboardWarehouseSelect className="border-b border-sidebar-border/80 pb-3 pt-1" />
       <ScrollArea className="flex-1 px-2 py-3">
         <nav className="space-y-3" aria-label="Main">
           {buildMainNavSections(role).map((section, idx) => (
@@ -170,7 +176,9 @@ export function SidebarPanel({
               {section.items.map((item) => (
                 <SidebarLink
                   key={`${item.label}-${item.href}`}
-                  {...item}
+                  href={item.href}
+                  label={item.label}
+                  icon={item.icon}
                   active={isMainNavActive(pathname, item.href)}
                   onNavigate={onNavigate}
                 />
@@ -188,7 +196,9 @@ export function SidebarPanel({
               {adminNav.map((item) => (
                 <SidebarLink
                   key={item.href}
-                  {...item}
+                  href={item.href}
+                  label={item.label}
+                  icon={item.icon}
                   active={pathname.startsWith(item.href)}
                   onNavigate={onNavigate}
                 />
@@ -258,9 +268,14 @@ function SidebarLink({
   active: boolean;
   onNavigate?: () => void;
 }) {
+  const whCtx = useDashboardWarehouseOptional();
+  const searchParams = useSearchParams();
+  const resolvedHref = whCtx
+    ? whCtx.hrefWithWarehouse(href)
+    : appendWarehouseToHref(href, searchParams.get("warehouse_id") ?? "");
   return (
     <Link
-      href={href}
+      href={resolvedHref}
       onClick={() => onNavigate?.()}
       className={cn(
         "group flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm outline-none transition-all duration-200",

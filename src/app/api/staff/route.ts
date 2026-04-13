@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { z } from "zod";
 import { adminClient } from "@/lib/supabase/admin";
 import { staffCreateSchema } from "@/lib/validators";
 import { requireRole } from "@/lib/auth";
@@ -6,7 +7,7 @@ import {
   assertWarehouseAccess,
   getAccessibleWarehouseIds
 } from "@/lib/warehouse-access";
-import { jsonOk, toErrorResponse } from "@/lib/http";
+import { HttpError, jsonOk, toErrorResponse } from "@/lib/http";
 
 export async function GET(req: NextRequest) {
   try {
@@ -15,6 +16,8 @@ export async function GET(req: NextRequest) {
     const rawActive = req.nextUrl.searchParams.get("is_active");
     const includeInactive =
       req.nextUrl.searchParams.get("include_inactive") === "true";
+    const narrowWarehouseId = req.nextUrl.searchParams.get("warehouse_id");
+    const staffTypeId = req.nextUrl.searchParams.get("staff_type_id");
 
     let query = adminClient
       .from("staff")
@@ -33,12 +36,39 @@ export async function GET(req: NextRequest) {
       )
       .order("created_at", { ascending: false });
 
-    if (appUser.role !== "admin") {
+    if (narrowWarehouseId) {
+      const whParsed = z.string().uuid().safeParse(narrowWarehouseId);
+      if (!whParsed.success) {
+        throw new HttpError(
+          "INVALID_WAREHOUSE",
+          "warehouse_id must be a valid UUID",
+          400
+        );
+      }
+      await assertWarehouseAccess(
+        appUser.id,
+        appUser.role,
+        narrowWarehouseId
+      );
+      query = query.eq("warehouse_id", narrowWarehouseId);
+    } else if (appUser.role !== "admin") {
       const ids = await getAccessibleWarehouseIds(appUser.id, appUser.role);
       if (!ids.length) {
         return jsonOk([]);
       }
       query = query.in("warehouse_id", ids);
+    }
+
+    if (staffTypeId) {
+      const stParsed = z.string().uuid().safeParse(staffTypeId);
+      if (!stParsed.success) {
+        throw new HttpError(
+          "INVALID_STAFF_TYPE",
+          "staff_type_id must be a valid UUID",
+          400
+        );
+      }
+      query = query.eq("staff_type_id", staffTypeId);
     }
 
     if (search) query = query.ilike("full_name", `%${search}%`);
@@ -63,13 +93,11 @@ export async function POST(req: NextRequest) {
       return toErrorResponse(parsed.error);
     }
 
-    if (parsed.data.warehouse_id) {
-      await assertWarehouseAccess(
-        appUser.id,
-        appUser.role,
-        parsed.data.warehouse_id
-      );
-    }
+    await assertWarehouseAccess(
+      appUser.id,
+      appUser.role,
+      parsed.data.warehouse_id
+    );
 
     const { data, error } = await adminClient
       .from("staff")

@@ -27,7 +27,7 @@ type Staff = {
   full_name: string;
   employee_code: string;
   phone: string | null;
-  warehouse_id: string | null;
+  warehouse_id: string;
   staff_type_id: string;
   is_active: boolean;
 };
@@ -37,9 +37,9 @@ export default function EditStaffPage() {
   const router = useRouter();
   const id = String(params.id);
   const [staff, setStaff] = useState<Staff | null>(null);
-  const [warehouses, setWarehouses] = useState<{ id: string; name: string }[]>(
-    []
-  );
+  const [warehouses, setWarehouses] = useState<
+    { id: string; code: string; name: string; is_active?: boolean }[]
+  >([]);
   const [types, setTypes] = useState<{ id: string; display_name: string }[]>(
     []
   );
@@ -48,15 +48,26 @@ export default function EditStaffPage() {
   useEffect(() => {
     void Promise.all([
       fetch(`/api/staff/${id}`).then((r) => r.json()),
-      fetch("/api/warehouses").then((r) => r.json())
+      fetch("/api/warehouses?include_inactive=true").then((r) => r.json())
     ]).then(async ([staffJson, whJson]) => {
       if (!staffJson.data) {
         toast.error("Staff not found");
         router.push("/dashboard/staff");
         return;
       }
-      setStaff(staffJson.data);
-      setWarehouses(whJson.data ?? []);
+      const whList = (whJson.data ?? []) as {
+        id: string;
+        code: string;
+        name: string;
+        is_active?: boolean;
+      }[];
+      const raw = staffJson.data as Staff & { warehouse_id?: string | null };
+      const wid =
+        raw.warehouse_id ??
+        whList[0]?.id ??
+        "";
+      setStaff({ ...raw, warehouse_id: wid });
+      setWarehouses(whList);
       const t = await fetch("/api/staff-types").catch(() => null);
       if (t?.ok) {
         const tj = await t.json();
@@ -68,6 +79,10 @@ export default function EditStaffPage() {
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     if (!staff) return;
+    if (!staff.warehouse_id) {
+      toast.error("Select a warehouse");
+      return;
+    }
     setLoading(true);
     try {
       const res = await fetch(`/api/staff/${id}`, {
@@ -150,22 +165,27 @@ export default function EditStaffPage() {
               <div className="space-y-2">
                 <Label>Warehouse</Label>
                 <Select
-                  value={staff.warehouse_id ?? "none"}
+                  value={staff.warehouse_id}
                   onValueChange={(v) =>
                     setStaff({
                       ...staff,
-                      warehouse_id: v === "none" ? null : v
+                      warehouse_id: v
                     })
                   }
+                  required
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Warehouse" />
+                    <SelectValue placeholder="Select warehouse" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">None</SelectItem>
                     {warehouses.map((w) => (
                       <SelectItem key={w.id} value={w.id}>
-                        {w.name}
+                        <span className="font-mono text-xs">{w.code}</span>
+                        <span className="text-muted-foreground">
+                          {" "}
+                          — {w.name}
+                          {w.is_active === false ? " (inactive)" : ""}
+                        </span>
                       </SelectItem>
                     ))}
                   </SelectContent>

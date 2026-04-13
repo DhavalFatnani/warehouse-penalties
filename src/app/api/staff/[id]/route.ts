@@ -73,6 +73,16 @@ export async function PATCH(
       );
     }
 
+    const nextWarehouseId =
+      parsed.data.warehouse_id ?? existing.warehouse_id;
+    if (!nextWarehouseId) {
+      throw new HttpError(
+        "WAREHOUSE_REQUIRED",
+        "Staff must be assigned to a warehouse",
+        400
+      );
+    }
+
     const { data, error } = await adminClient
       .from("staff")
       .update(parsed.data)

@@ -6,7 +6,11 @@ import {
   importCommitSchema
 } from "@/lib/validators";
 import { requireRole } from "@/lib/auth";
-import { assertWarehouseAccess } from "@/lib/warehouse-access";
+import {
+  assertWarehouseAccess,
+  getAccessibleWarehouseIds
+} from "@/lib/warehouse-access";
+import { resolveWarehouseForImportRow } from "@/lib/csv-warehouse";
 import { HttpError, jsonOk, toErrorResponse } from "@/lib/http";
 
 type CsvRow = Record<string, string>;
@@ -71,15 +75,40 @@ export async function PUT(req: NextRequest) {
       return toErrorResponse(parsed.error);
     }
 
-    await assertWarehouseAccess(
+    if (parsed.data.warehouse_id) {
+      await assertWarehouseAccess(
+        appUser.id,
+        appUser.role,
+        parsed.data.warehouse_id
+      );
+    }
+
+    const accessibleIds = await getAccessibleWarehouseIds(
       appUser.id,
-      appUser.role,
-      parsed.data.warehouse_id
+      appUser.role
     );
+    const accessibleSet = new Set(accessibleIds);
+    const codeToId = new Map<string, string>();
+    if (accessibleIds.length > 0) {
+      const { data: whRows, error: whErr } = await adminClient
+        .from("warehouses")
+        .select("id, code")
+        .in("id", accessibleIds);
+      if (whErr) throw new Error(whErr.message);
+      for (const w of whRows ?? []) {
+        codeToId.set(
+          String(w.code ?? "")
+            .trim()
+            .toUpperCase(),
+          w.id as string
+        );
+      }
+    }
 
     const csvParsed = Papa.parse<CsvRow>(parsed.data.csv, {
       header: true,
-      skipEmptyLines: true
+      skipEmptyLines: true,
+      transformHeader: (h) => h.replace(/^\ufeff/, "").trim().toLowerCase()
     });
 
     if (csvParsed.errors.length) {
@@ -119,9 +148,20 @@ export async function PUT(req: NextRequest) {
         });
       }
 
+      const whResolved = resolveWarehouseForImportRow({
+        row,
+        defaultWarehouseId: parsed.data.warehouse_id ?? null,
+        codeToId,
+        accessibleIds: accessibleSet
+      });
+      if (!whResolved.ok) {
+        fieldErrors.push({ field: "warehouse", message: whResolved.message });
+      }
+
       const validation_status = fieldErrors.length === 0 ? "valid" : "invalid";
       return {
         row_number: i + 1,
+        warehouse_id: whResolved.ok ? whResolved.warehouse_id : null,
         raw: { ...row, staff_type_code: rawType },
         validation_status,
         validation_errors:
@@ -135,7 +175,7 @@ export async function PUT(req: NextRequest) {
       "commit_staff_import_batch",
       {
         p_batch_id: parsed.data.batch_id,
-        p_warehouse_id: parsed.data.warehouse_id,
+        p_warehouse_id: parsed.data.warehouse_id ?? null,
         p_rows: pRows
       }
     );

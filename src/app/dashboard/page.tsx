@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { Suspense } from "react";
 import { getCurrentAppUser } from "@/lib/auth";
 import { fetchDashboardStats } from "@/lib/dashboard-stats";
 import { adminClient } from "@/lib/supabase/admin";
@@ -21,7 +20,6 @@ import {
   TableRow
 } from "@/components/ui/table";
 import { ArrowRight, Gavel } from "lucide-react";
-import { DashboardWarehouseFilter } from "./dashboard-warehouse-filter";
 
 export default async function DashboardPage({
   searchParams
@@ -47,28 +45,24 @@ export default async function DashboardPage({
     whList = whList.filter((w) => allowed.has(w.id));
   }
 
+  const whQ = searchParams.warehouse_id
+    ? `?warehouse_id=${encodeURIComponent(searchParams.warehouse_id)}`
+    : "";
+
   return (
     <div className="mx-auto max-w-6xl space-y-8">
       <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
           <p className="text-sm text-muted-foreground">
-            Open penalties and recent activity for your warehouses.
+            Open penalties and recent activity. Use{" "}
+            <span className="font-medium text-foreground">Site scope</span> in
+            the sidebar to filter by warehouse.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Suspense
-            fallback={
-              <div className="h-10 w-[200px] animate-pulse rounded-md bg-muted" />
-            }
-          >
-            <DashboardWarehouseFilter
-              warehouses={whList}
-              currentId={searchParams.warehouse_id ?? ""}
-            />
-          </Suspense>
           <Button asChild size="sm">
-            <Link href="/dashboard/apply">
+            <Link href={`/dashboard/apply${whQ}`}>
               <Gavel className="mr-2 h-4 w-4" />
               Apply penalty
             </Link>
@@ -164,7 +158,7 @@ export default async function DashboardPage({
               <CardDescription>Latest across statuses</CardDescription>
             </div>
             <Button variant="ghost" size="sm" asChild>
-              <Link href="/dashboard/records">
+              <Link href={`/dashboard/records${whQ}`}>
                 All
                 <ArrowRight className="ml-1 h-3 w-3" />
               </Link>

@@ -63,6 +63,8 @@ Supabase overview: [Send emails with custom SMTP](https://supabase.com/docs/guid
 supabase db push
 ```
 
+Bundled demo staff (employee IDs like `EMP-PP-001`, …) are removed by migration `202604150001_purge_sample_staff.sql`. Admins can run the same cleanup again from **Staff → Remove demo staff** if those rows reappear.
+
 5. Seed sample data:
 
 ```bash

@@ -4,6 +4,10 @@ import { adminClient } from "@/lib/supabase/admin";
 import { jsonOk, toErrorResponse } from "@/lib/http";
 import { penaltyCodeCreateSchema } from "@/lib/validators";
 import { getAccessibleWarehouseIds, assertWarehouseAccess } from "@/lib/warehouse-access";
+import {
+  normalizePenaltyCodeRow,
+  PENALTY_CODE_SELECT
+} from "@/lib/penalty-code-row";
 
 export async function GET(req: NextRequest) {
   try {
@@ -26,7 +30,7 @@ export async function GET(req: NextRequest) {
 
     let q = adminClient
       .from("penalty_codes")
-      .select("id, code, warehouse_id, created_at, is_active")
+      .select(PENALTY_CODE_SELECT)
       .order("code", { ascending: true });
 
     if (!includeInactive) {
@@ -49,7 +53,47 @@ export async function GET(req: NextRequest) {
 
     const { data, error } = await q;
     if (error) throw new Error(error.message);
-    return jsonOk(data ?? []);
+    let rows = (data ?? []).map((r) =>
+      normalizePenaltyCodeRow(r as Record<string, unknown>)
+    );
+
+    const orphanIds = [
+      ...new Set(
+        rows
+          .filter(
+            (r) =>
+              r.warehouse_id != null &&
+              (!r.warehouse || (!r.warehouse.code && !r.warehouse.name))
+          )
+          .map((r) => r.warehouse_id as string)
+      )
+    ];
+    if (orphanIds.length > 0) {
+      const { data: whRows, error: whErr } = await adminClient
+        .from("warehouses")
+        .select("id, code, name")
+        .in("id", orphanIds);
+      if (whErr) throw new Error(whErr.message);
+      const byId = new Map(
+        (whRows ?? []).map((w) => [
+          String(w.id),
+          {
+            id: String(w.id),
+            code: String(w.code ?? ""),
+            name: String(w.name ?? "")
+          }
+        ])
+      );
+      rows = rows.map((r) => {
+        if (!r.warehouse_id) return r;
+        if (r.warehouse && (r.warehouse.code || r.warehouse.name)) return r;
+        const w = byId.get(r.warehouse_id);
+        if (!w) return r;
+        return { ...r, warehouse: w };
+      });
+    }
+
+    return jsonOk(rows);
   } catch (e) {
     return toErrorResponse(e);
   }
@@ -73,10 +117,10 @@ export async function POST(req: NextRequest) {
         code: parsed.data.code,
         warehouse_id
       })
-      .select("id, code, warehouse_id, created_at, is_active")
+      .select(PENALTY_CODE_SELECT)
       .single();
     if (error) throw new Error(error.message);
-    return jsonOk(data, 201);
+    return jsonOk(normalizePenaltyCodeRow(data as Record<string, unknown>), 201);
   } catch (e) {
     return toErrorResponse(e);
   }

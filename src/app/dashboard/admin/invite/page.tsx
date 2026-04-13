@@ -23,7 +23,12 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertCircle } from "lucide-react";
 
-type Warehouse = { id: string; code: string; name: string };
+type Warehouse = {
+  id: string;
+  code: string;
+  name: string;
+  is_active?: boolean;
+};
 
 function shouldShowEmailTroubleshooting(error: string | null): boolean {
   if (!error) return false;
@@ -47,7 +52,7 @@ export default function AdminInvitePage() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    void fetch("/api/warehouses").then(async (r) => {
+    void fetch("/api/warehouses?include_inactive=true").then(async (r) => {
       const json = await r.json();
       if (r.ok) setWarehouses(json.data ?? []);
     });
@@ -194,7 +199,11 @@ export default function AdminInvitePage() {
                         className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
                       >
                         <span className="font-mono text-xs">{w.code}</span>
-                        <span className="text-muted-foreground"> — {w.name}</span>
+                        <span className="text-muted-foreground">
+                          {" "}
+                          — {w.name}
+                          {w.is_active === false ? " (inactive)" : ""}
+                        </span>
                       </label>
                     </div>
                   ))

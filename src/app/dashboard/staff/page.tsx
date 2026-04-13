@@ -3,6 +3,7 @@
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import {
   Table,
@@ -23,6 +24,14 @@ import {
   CardTitle
 } from "@/components/ui/card";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle
+} from "@/components/ui/dialog";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -34,6 +43,7 @@ import {
   type StaffPageRefs
 } from "@/components/staff-add-panel";
 import { StaffBulkImportPanel } from "@/components/staff-bulk-import-panel";
+import { useDashboardWarehouse } from "@/components/dashboard-warehouse-context";
 import { Search, Users, ChevronRight } from "lucide-react";
 
 type StaffRow = {
@@ -80,19 +90,27 @@ function StaffHubContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const tab = parseTab(searchParams.get("tab"));
+  const { warehouseId } = useDashboardWarehouse();
 
   const [rows, setRows] = useState<StaffRow[]>([]);
   const [q, setQ] = useState("");
   const [activeFilter, setActiveFilter] = useState<"all" | "active" | "inactive">(
     "all"
   );
+  /** Staff type UUID; empty = all roles (PP, IE, …). */
+  const [roleFilter, setRoleFilter] = useState("");
   const [staffRefs, setStaffRefs] = useState<StaffPageRefs | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [purgeOpen, setPurgeOpen] = useState(false);
+  const [purgeSubmitting, setPurgeSubmitting] = useState(false);
 
   const loadStaff = useCallback(() => {
     const p = new URLSearchParams();
     if (activeFilter === "active") p.set("is_active", "true");
     if (activeFilter === "inactive") p.set("is_active", "false");
     if (activeFilter === "all") p.set("include_inactive", "true");
+    if (warehouseId) p.set("warehouse_id", warehouseId);
+    if (roleFilter) p.set("staff_type_id", roleFilter);
     const qs = p.toString();
     void fetch(`/api/staff?${qs}`)
       .then((r) => r.json())
@@ -100,7 +118,7 @@ function StaffHubContent() {
         const raw = (j.data ?? []) as Record<string, unknown>[];
         setRows(raw.map(mapStaff));
       });
-  }, [activeFilter]);
+  }, [activeFilter, warehouseId, roleFilter]);
 
   useEffect(() => {
     if (tab === "directory") {
@@ -111,7 +129,7 @@ function StaffHubContent() {
   useEffect(() => {
     let cancelled = false;
     void Promise.all([
-      fetch("/api/warehouses").then((r) => r.json()),
+      fetch("/api/warehouses?include_inactive=true").then((r) => r.json()),
       fetch("/api/staff-types").then((r) => r.json())
     ]).then(([whJson, tJson]) => {
       if (cancelled) return;
@@ -124,6 +142,50 @@ function StaffHubContent() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetch("/api/me")
+      .then((r) => r.json())
+      .then((j) => {
+        if (cancelled) return;
+        setIsAdmin(j?.data?.role === "admin");
+      })
+      .catch(() => {
+        if (!cancelled) setIsAdmin(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function runPurgeDemoStaff() {
+    setPurgeSubmitting(true);
+    try {
+      const res = await fetch("/api/admin/sample-staff/purge", {
+        method: "POST"
+      });
+      const j = await res.json();
+      if (!res.ok) {
+        throw new Error(j.error?.message ?? "Purge failed");
+      }
+      const pr = Number(j.data?.penalty_records_deleted ?? 0);
+      const st = Number(j.data?.staff_deleted ?? 0);
+      if (st === 0) {
+        toast.info("No demo staff matched the removal rules.");
+      } else {
+        toast.success(
+          `Removed ${st} staff row(s); deleted ${pr} penalty record(s).`
+        );
+      }
+      setPurgeOpen(false);
+      loadStaff();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Error");
+    } finally {
+      setPurgeSubmitting(false);
+    }
+  }
 
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
@@ -159,9 +221,68 @@ function StaffHubContent() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Staff</h1>
         <p className="text-sm text-muted-foreground">
-          Directory, add one person, or bulk CSV. Records are never deleted.
+          Directory, add one person, or bulk CSV. The directory list follows{" "}
+          <span className="font-medium text-foreground">Site scope</span> in the
+          sidebar (admins: choose &quot;All warehouses&quot; to list everyone).
+          Staff is kept by default; admins can remove bundled demo rows when going
+          live.
         </p>
       </div>
+
+      {isAdmin ? (
+        <Card className="border-amber-500/35 bg-amber-500/[0.06] shadow-sm">
+          <CardHeader className="pb-2 pt-4">
+            <CardTitle className="text-base">Demo staff cleanup</CardTitle>
+            <CardDescription className="text-sm">
+              Permanently deletes bundled demo employees (employee IDs like{" "}
+              <span className="font-mono text-xs">EMP-PP-001</span>,{" "}
+              <span className="font-mono text-xs">EMP-IE-001</span>, …) and anyone
+              whose name contains &quot;removed sample&quot;, including their penalty
+              records. Use employee IDs outside that pattern for real hires.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="pb-4 pt-0">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="border-amber-600/40 bg-background/80"
+              onClick={() => setPurgeOpen(true)}
+            >
+              Remove demo staff…
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      <Dialog open={purgeOpen} onOpenChange={setPurgeOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Remove demo staff?</DialogTitle>
+            <DialogDescription>
+              This cannot be undone. Only rows matching the demo rules are removed.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setPurgeOpen(false)}
+              disabled={purgeSubmitting}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={purgeSubmitting}
+              onClick={() => void runPurgeDemoStaff()}
+            >
+              {purgeSubmitting ? "Removing…" : "Remove demo staff"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Tabs value={tab} onValueChange={setTab} className="w-full space-y-5">
         <TabsList className="grid h-11 w-full grid-cols-3 rounded-lg border border-border/80 bg-muted/50 p-1 md:inline-flex md:h-11 md:w-auto">
@@ -217,7 +338,7 @@ function StaffHubContent() {
                       aria-label="Search staff"
                     />
                   </div>
-                  <div className="flex w-full gap-2 sm:w-auto sm:shrink-0">
+                  <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:shrink-0">
                     <Select
                       value={activeFilter}
                       onValueChange={(v) =>
@@ -231,6 +352,29 @@ function StaffHubContent() {
                         <SelectItem value="all">All statuses</SelectItem>
                         <SelectItem value="active">Active only</SelectItem>
                         <SelectItem value="inactive">Inactive only</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Select
+                      value={roleFilter || "__all_roles__"}
+                      onValueChange={(v) =>
+                        setRoleFilter(v === "__all_roles__" ? "" : v)
+                      }
+                      disabled={!staffRefs}
+                    >
+                      <SelectTrigger className="h-9 w-full bg-background sm:min-w-[10rem] sm:w-[180px]">
+                        <SelectValue placeholder="All roles" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__all_roles__">All roles</SelectItem>
+                        {(staffRefs?.types ?? []).map((t) => (
+                          <SelectItem key={t.id} value={t.id}>
+                            <span className="font-mono text-xs">{t.code}</span>
+                            <span className="text-muted-foreground">
+                              {" "}
+                              — {t.display_name}
+                            </span>
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                     <Button
@@ -280,7 +424,7 @@ function StaffHubContent() {
                           className="h-28 text-center text-sm text-muted-foreground"
                         >
                           {rows.length === 0
-                            ? "No staff in this filter. Try “All statuses” or refresh."
+                            ? "No staff in this filter. Try “All statuses”, “All roles”, or refresh."
                             : "No rows match your search."}
                         </TableCell>
                       </TableRow>
