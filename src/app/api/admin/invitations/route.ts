@@ -53,7 +53,9 @@ export async function POST(req: NextRequest) {
     );
 
     const origin = getAppUrlFromRequest(req);
-    const redirectTo = `${origin}/auth/callback?next=${encodeURIComponent("/dashboard")}`;
+    const redirectTo = `${origin}/auth/callback?next=${encodeURIComponent(
+      "/auth/update-password"
+    )}`;
 
     const { data: created, error: inviteErr } =
       await adminClient.auth.admin.inviteUserByEmail(parsed.data.email, {
