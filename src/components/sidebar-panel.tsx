@@ -10,6 +10,7 @@ import {
   Gavel,
   Home,
   LayoutDashboard,
+  Logs,
   Shield,
   Upload,
   Users,
@@ -119,7 +120,8 @@ function buildMainNavSections(
 const adminNav = [
   { href: "/dashboard/admin/users", label: "Users", icon: Shield },
   { href: "/dashboard/admin/access", label: "Warehouse access", icon: Shield },
-  { href: "/dashboard/admin/invite", label: "Invite users", icon: Shield }
+  { href: "/dashboard/admin/invite", label: "Invite users", icon: Shield },
+  { href: "/dashboard/admin/activity", label: "Activity logs", icon: Logs }
 ];
 
 export function SidebarPanel({

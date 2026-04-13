@@ -8,7 +8,7 @@ export async function writeAudit(params: {
   oldValues?: unknown;
   newValues?: unknown;
 }) {
-  await adminClient.from("audit_log").insert({
+  const { error } = await adminClient.from("audit_log").insert({
     entity_type: params.entityType,
     entity_id: params.entityId,
     action: params.action,
@@ -16,4 +16,5 @@ export async function writeAudit(params: {
     old_values: params.oldValues ?? null,
     new_values: params.newValues ?? null
   });
+  if (error) throw new Error(`Audit write failed: ${error.message}`);
 }

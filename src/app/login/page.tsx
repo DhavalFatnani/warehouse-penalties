@@ -52,6 +52,13 @@ function LoginForm() {
       setError(signInError.message);
       return;
     }
+    await fetch("/api/auth/activity", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "login" })
+    }).catch(() => {
+      // Best-effort logging; do not block login if audit write fails.
+    });
     // Full navigation so the next document load sends session cookies to middleware.
     // router.push alone can race SSR/middleware and leave you on login until refresh.
     window.location.assign("/dashboard");
