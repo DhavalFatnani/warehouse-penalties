@@ -141,6 +141,8 @@ export default function AdminActivityPage() {
   const [error, setError] = useState<string | null>(null);
   const [q, setQ] = useState("");
   const [changedByUserId, setChangedByUserId] = useState("");
+  const [actionFilter, setActionFilter] = useState("");
+  const [entityTypeFilter, setEntityTypeFilter] = useState("");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [page, setPage] = useState(1);
@@ -168,6 +170,8 @@ export default function AdminActivityPage() {
       params.set("page_size", String(PAGE_SIZE));
       if (q.trim()) params.set("q", q.trim());
       if (changedByUserId) params.set("changed_by_user_id", changedByUserId);
+      if (actionFilter) params.set("action", actionFilter);
+      if (entityTypeFilter) params.set("entity_type", entityTypeFilter);
       if (fromDate) params.set("from", fromDate);
       if (toDate) params.set("to", toDate);
       const res = await fetch(`/api/admin/activity-logs?${params.toString()}`);
@@ -183,6 +187,36 @@ export default function AdminActivityPage() {
       toast.error(msg);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function exportCsv() {
+    try {
+      const params = new URLSearchParams();
+      params.set("format", "csv");
+      if (q.trim()) params.set("q", q.trim());
+      if (changedByUserId) params.set("changed_by_user_id", changedByUserId);
+      if (actionFilter) params.set("action", actionFilter);
+      if (entityTypeFilter) params.set("entity_type", entityTypeFilter);
+      if (fromDate) params.set("from", fromDate);
+      if (toDate) params.set("to", toDate);
+      const res = await fetch(`/api/admin/activity-logs?${params.toString()}`);
+      if (!res.ok) {
+        const json = await res.json();
+        throw new Error(json?.error ?? "Failed to export CSV");
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "activity-logs.csv";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Failed to export CSV";
+      toast.error(msg);
     }
   }
 
@@ -242,7 +276,7 @@ export default function AdminActivityPage() {
             Search by action/entity, or narrow by actor and date range.
           </CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
           <div className="space-y-1 lg:col-span-2">
             <Label htmlFor="q">Search</Label>
             <Input
@@ -250,6 +284,24 @@ export default function AdminActivityPage() {
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="action or entity type"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="action-filter">Action</Label>
+            <Input
+              id="action-filter"
+              value={actionFilter}
+              onChange={(e) => setActionFilter(e.target.value)}
+              placeholder="auth_login"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="entity-filter">Entity type</Label>
+            <Input
+              id="entity-filter"
+              value={entityTypeFilter}
+              onChange={(e) => setEntityTypeFilter(e.target.value)}
+              placeholder="auth_session"
             />
           </div>
           <div className="space-y-1">
@@ -289,7 +341,29 @@ export default function AdminActivityPage() {
               onChange={(e) => setToDate(e.target.value)}
             />
           </div>
-          <div className="sm:col-span-2 lg:col-span-5 flex items-center gap-2">
+          <div className="sm:col-span-2 lg:col-span-6 flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                setActionFilter("");
+                setEntityTypeFilter("auth_session");
+              }}
+              disabled={loading}
+            >
+              Auth only
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => {
+                setActionFilter("");
+                setEntityTypeFilter("");
+              }}
+              disabled={loading}
+            >
+              All events
+            </Button>
             <Button type="button" onClick={applyFilters} disabled={loading}>
               Apply filters
             </Button>
@@ -299,6 +373,8 @@ export default function AdminActivityPage() {
               onClick={() => {
                 setQ("");
                 setChangedByUserId("");
+                setActionFilter("");
+                setEntityTypeFilter("");
                 setFromDate("");
                 setToDate("");
                 setPage(1);
@@ -307,6 +383,14 @@ export default function AdminActivityPage() {
               disabled={loading}
             >
               Reset
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void exportCsv()}
+              disabled={loading}
+            >
+              Export CSV
             </Button>
           </div>
         </CardContent>

@@ -414,9 +414,9 @@ export default function SettlementPage() {
         </CardHeader>
         <CardContent className="space-y-4 p-4 sm:p-5">
           {/* Dates + all-time */}
-          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
-            <div className="grid grid-cols-2 gap-2 sm:max-w-[17rem]">
-              <div className="space-y-1">
+          <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end sm:gap-5">
+            <div className="flex w-full flex-col gap-3 min-[420px]:w-auto min-[420px]:flex-row min-[420px]:gap-4">
+              <div className="min-w-0 space-y-1 min-[420px]:w-[13rem] min-[420px]:shrink-0">
                 <Label
                   htmlFor="settle-from"
                   className="text-xs uppercase tracking-wide text-muted-foreground"
@@ -429,10 +429,10 @@ export default function SettlementPage() {
                   value={from}
                   disabled={allTime}
                   onChange={(e) => setFrom(e.target.value)}
-                  className="h-9 bg-background text-sm"
+                  className="h-9 w-full min-w-0 bg-background text-sm min-[420px]:min-w-[13rem]"
                 />
               </div>
-              <div className="space-y-1">
+              <div className="min-w-0 space-y-1 min-[420px]:w-[13rem] min-[420px]:shrink-0">
                 <Label
                   htmlFor="settle-to"
                   className="text-xs uppercase tracking-wide text-muted-foreground"
@@ -445,13 +445,13 @@ export default function SettlementPage() {
                   value={to}
                   disabled={allTime}
                   onChange={(e) => setTo(e.target.value)}
-                  className="h-9 bg-background text-sm"
+                  className="h-9 w-full min-w-0 bg-background text-sm min-[420px]:min-w-[13rem]"
                 />
               </div>
             </div>
             <label
               className={cn(
-                "flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm sm:ml-0",
+                "flex shrink-0 cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm",
                 allTime
                   ? "border-primary/40 bg-primary/[0.06]"
                   : "border-transparent bg-muted/40"

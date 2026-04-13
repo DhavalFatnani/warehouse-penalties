@@ -96,7 +96,7 @@ function buildMainNavSections(
       title: "Directory",
       items: [
         { href: "/dashboard/staff", label: "Staff", icon: Users },
-        warehousesNavItem(role)
+        ...(isStoreManagerRole(role) ? [] : [warehousesNavItem(role)])
       ]
     },
     {

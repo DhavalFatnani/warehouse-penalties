@@ -2,10 +2,12 @@ import { NextRequest } from "next/server";
 import { requireRole } from "@/lib/auth";
 import { adminClient } from "@/lib/supabase/admin";
 import { jsonOk, toErrorResponse } from "@/lib/http";
+import { NextResponse } from "next/server";
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_PAGE_SIZE = 25;
 const MAX_PAGE_SIZE = 100;
+const MAX_CSV_ROWS = 5000;
 
 type AuditLogRow = {
   id: string;
@@ -42,6 +44,8 @@ function applyFilters(
   params: {
     q: string;
     changedByUserId: string;
+    action: string;
+    entityType: string;
     fromDate: string | null;
     toDate: string | null;
   }
@@ -49,6 +53,12 @@ function applyFilters(
   let q = query;
   if (params.changedByUserId) {
     q = q.eq("changed_by_user_id", params.changedByUserId);
+  }
+  if (params.action) {
+    q = q.eq("action", params.action);
+  }
+  if (params.entityType) {
+    q = q.eq("entity_type", params.entityType);
   }
   if (params.fromDate) {
     q = q.gte("changed_at", params.fromDate);
@@ -70,10 +80,22 @@ function applyFilters(
   return q;
 }
 
+function csvCell(value: unknown): string {
+  const raw =
+    value == null
+      ? ""
+      : typeof value === "string"
+        ? value
+        : JSON.stringify(value);
+  const escaped = raw.replace(/"/g, '""');
+  return `"${escaped}"`;
+}
+
 export async function GET(req: NextRequest) {
   try {
     await requireRole(["admin"]);
 
+    const format = (req.nextUrl.searchParams.get("format") ?? "").trim().toLowerCase();
     const page = parsePositiveInt(req.nextUrl.searchParams.get("page"), DEFAULT_PAGE);
     const page_size = Math.min(
       parsePositiveInt(req.nextUrl.searchParams.get("page_size"), DEFAULT_PAGE_SIZE),
@@ -83,12 +105,14 @@ export async function GET(req: NextRequest) {
 
     const q = (req.nextUrl.searchParams.get("q") ?? "").trim();
     const changedByUserId = (req.nextUrl.searchParams.get("changed_by_user_id") ?? "").trim();
+    const action = (req.nextUrl.searchParams.get("action") ?? "").trim();
+    const entityType = (req.nextUrl.searchParams.get("entity_type") ?? "").trim();
     const fromDate = parseDateBoundary(req.nextUrl.searchParams.get("from"), false);
     const toDate = parseDateBoundary(req.nextUrl.searchParams.get("to"), true);
 
     const countQuery = applyFilters(
       adminClient.from("audit_log").select("id", { count: "exact", head: true }),
-      { q, changedByUserId, fromDate, toDate }
+      { q, changedByUserId, action, entityType, fromDate, toDate }
     );
     const { count, error: countError } = await countQuery;
     if (countError) throw new Error(countError.message);
@@ -100,8 +124,11 @@ export async function GET(req: NextRequest) {
           "id, entity_type, entity_id, action, changed_by_user_id, changed_at, old_values, new_values"
         )
         .order("changed_at", { ascending: false })
-        .range(offset, offset + page_size - 1),
-      { q, changedByUserId, fromDate, toDate }
+        .range(
+          format === "csv" ? 0 : offset,
+          format === "csv" ? MAX_CSV_ROWS - 1 : offset + page_size - 1
+        ),
+      { q, changedByUserId, action, entityType, fromDate, toDate }
     );
     const { data, error } = await dataQuery;
     if (error) throw new Error(error.message);
@@ -146,6 +173,43 @@ export async function GET(req: NextRequest) {
         ? actorById.get(String(row.changed_by_user_id)) ?? null
         : null
     }));
+
+    if (format === "csv") {
+      const header = [
+        "changed_at",
+        "action",
+        "entity_type",
+        "entity_id",
+        "actor_name",
+        "actor_email",
+        "changed_by_user_id",
+        "old_values",
+        "new_values"
+      ];
+      const csvLines = [header.join(",")];
+      for (const row of rows) {
+        csvLines.push(
+          [
+            csvCell(row.changed_at),
+            csvCell(row.action),
+            csvCell(row.entity_type),
+            csvCell(row.entity_id),
+            csvCell(row.actor?.full_name ?? ""),
+            csvCell(row.actor?.email ?? ""),
+            csvCell(row.changed_by_user_id ?? ""),
+            csvCell(row.old_values),
+            csvCell(row.new_values)
+          ].join(",")
+        );
+      }
+      return new NextResponse(csvLines.join("\n"), {
+        status: 200,
+        headers: {
+          "Content-Type": "text/csv; charset=utf-8",
+          "Content-Disposition": 'attachment; filename="activity-logs.csv"'
+        }
+      });
+    }
 
     return jsonOk({
       rows,
