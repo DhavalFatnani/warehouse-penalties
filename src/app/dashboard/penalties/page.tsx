@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -26,6 +26,13 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle
+} from "@/components/ui/card";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -48,12 +55,27 @@ type Def = {
   id: string;
   code?: string | null;
   title?: string;
+  description?: string | null;
   default_amount?: number | null;
   structure_model?: string;
   warehouse_id?: string | null;
   warehouse?: { id: string; code: string; name: string } | null;
   staff_types?: { id: string; code: string; display_name: string }[];
 };
+
+async function readApiJsonSafe(
+  res: Response
+): Promise<{ error?: { message?: string } } | null> {
+  const contentType = res.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    return null;
+  }
+  try {
+    return (await res.json()) as { error?: { message?: string } };
+  } catch {
+    return null;
+  }
+}
 
 function definitionWarehouseLabel(
   r: Def,
@@ -69,7 +91,7 @@ function definitionWarehouseLabel(
 }
 
 export default function PenaltyDefinitionsPage() {
-  const { warehouseId } = useDashboardWarehouse();
+  const { warehouseId, userRole } = useDashboardWarehouse();
   const [rows, setRows] = useState<Def[]>([]);
   const [staffTypes, setStaffTypes] = useState<StaffTypeRow[]>([]);
   const [warehouses, setWarehouses] = useState<WarehouseRow[]>([]);
@@ -80,6 +102,11 @@ export default function PenaltyDefinitionsPage() {
   const [codeOpen, setCodeOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [codeLoading, setCodeLoading] = useState(false);
+  const [codeSearch, setCodeSearch] = useState("");
+  const [definitionSearch, setDefinitionSearch] = useState("");
+  const [definitionScopeFilter, setDefinitionScopeFilter] = useState<
+    "all" | "global" | "site"
+  >("all");
   const [defWarehouseScope, setDefWarehouseScope] = useState<string>("");
   const [penaltyCodeId, setPenaltyCodeId] = useState<string>("");
   const [form, setForm] = useState({
@@ -336,8 +363,99 @@ export default function PenaltyDefinitionsPage() {
     }
   }
 
+  async function onDeleteCode(c: PenaltyCodeRow) {
+    if (
+      !confirm(
+        `Permanently delete "${c.code}"? This cannot be undone. Delete is allowed only when no definitions use this code.`
+      )
+    ) {
+      return;
+    }
+    try {
+      const res = await fetch(`/api/penalty-codes/${c.id}`, {
+        method: "DELETE"
+      });
+      const json = await readApiJsonSafe(res);
+      if (!res.ok) {
+        throw new Error(
+          json?.error?.message ??
+            "Delete failed. If this happened after a hot reload, run clean and restart dev server."
+        );
+      }
+      toast.success("Code deleted");
+      await loadCatalogCodes();
+      if (defWarehouseScope) {
+        const param =
+          defWarehouseScope === "global" ? "global" : defWarehouseScope;
+        const r = await fetch(
+          `/api/penalty-codes?for_definition_warehouse=${encodeURIComponent(param)}`
+        );
+        const j = await r.json();
+        if (r.ok) setCodesForDef((j.data ?? []) as PenaltyCodeRow[]);
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Error");
+    }
+  }
+
+  const codeMetrics = useMemo(() => {
+    const active = catalogCodes.filter((c) => c.is_active).length;
+    const removed = catalogCodes.length - active;
+    const global = catalogCodes.filter((c) => !c.warehouse_id).length;
+    const siteScoped = catalogCodes.filter((c) => Boolean(c.warehouse_id)).length;
+    return { active, removed, global, siteScoped };
+  }, [catalogCodes]);
+
+  const filteredCodes = useMemo(() => {
+    const q = codeSearch.trim().toLowerCase();
+    if (!q) return catalogCodes;
+    return catalogCodes.filter((c) =>
+      [
+        c.code,
+        warehouseScopeDisplayLabel(c.warehouse_id, c.warehouse, warehouses)
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(q)
+    );
+  }, [catalogCodes, codeSearch, warehouses]);
+
+  const definitionMetrics = useMemo(() => {
+    const global = rows.filter((r) => !r.warehouse_id).length;
+    const siteScoped = rows.length - global;
+    const withAmount = rows.filter((r) => r.default_amount != null).length;
+    return { global, siteScoped, withAmount };
+  }, [rows]);
+
+  const filteredDefinitions = useMemo(() => {
+    const q = definitionSearch.trim().toLowerCase();
+    return rows.filter((r) => {
+      const scopeMatch =
+        definitionScopeFilter === "all"
+          ? true
+          : definitionScopeFilter === "global"
+            ? !r.warehouse_id
+            : Boolean(r.warehouse_id);
+      if (!scopeMatch) return false;
+      if (!q) return true;
+      const staffTypeText = (r.staff_types ?? [])
+        .map((s) => s.display_name ?? s.code ?? "")
+        .join(" ");
+      const haystack = [
+        r.code ?? "",
+        r.title ?? "",
+        definitionWarehouseLabel(r, warehouses),
+        r.description ?? "",
+        staffTypeText
+      ]
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [rows, definitionSearch, definitionScopeFilter, warehouses]);
+
   return (
-    <div className="mx-auto max-w-5xl space-y-8">
+    <div className="mx-auto w-full min-w-0 max-w-[min(100%,88rem)] space-y-6 pb-2 lg:space-y-8">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">
           Penalty definitions
@@ -351,7 +469,82 @@ export default function PenaltyDefinitionsPage() {
         </p>
       </div>
 
-      <div className="flex flex-col gap-3 rounded-lg border p-4">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>Total definitions</CardDescription>
+            <CardTitle className="text-2xl tabular-nums">{rows.length}</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0 text-xs text-muted-foreground">
+            In current site scope
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>Global definitions</CardDescription>
+            <CardTitle className="text-2xl tabular-nums">
+              {definitionMetrics.global}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0 text-xs text-muted-foreground">
+            Applicable across warehouses
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>Active penalty codes</CardDescription>
+            <CardTitle className="text-2xl tabular-nums">
+              {codeMetrics.active}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0 text-xs text-muted-foreground">
+            {codeMetrics.removed} removed from new use
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>Definitions with amount</CardDescription>
+            <CardTitle className="text-2xl tabular-nums">
+              {definitionMetrics.withAmount}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0 text-xs text-muted-foreground">
+            Fixed amount configured
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card className="border-dashed">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">How this page works</CardTitle>
+          <CardDescription>
+            Set up catalog codes first, then create warehouse/global definitions
+            and map staff types.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-2 text-sm sm:grid-cols-3">
+          <div className="rounded-md border bg-muted/20 p-3">
+            <p className="font-medium">1. Create code</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Keep codes short and consistent (e.g. LATE, DAMAGE, ABSENT).
+            </p>
+          </div>
+          <div className="rounded-md border bg-muted/20 p-3">
+            <p className="font-medium">2. Define scope & amount</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Choose global or site scope, title, and default amount.
+            </p>
+          </div>
+          <div className="rounded-md border bg-muted/20 p-3">
+            <p className="font-medium">3. Map staff types</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Limit penalties to eligible roles to avoid accidental assignment.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="min-w-0 flex flex-col gap-3 rounded-lg border p-3 sm:p-4">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-lg font-medium">Penalty codes</h2>
@@ -433,10 +626,24 @@ export default function PenaltyDefinitionsPage() {
             </DialogContent>
           </Dialog>
         </div>
-        <div className="rounded-md border">
-          <Table>
+        <div className="grid gap-2 sm:grid-cols-3">
+          <Input
+            value={codeSearch}
+            onChange={(e) => setCodeSearch(e.target.value)}
+            placeholder="Search code or scope"
+            className="sm:col-span-2"
+          />
+          <div className="flex items-center justify-end gap-2 rounded-md border bg-muted/30 px-3 py-2 text-xs">
+            <Badge variant="secondary">{codeMetrics.global} global</Badge>
+            <Badge variant="outline">{codeMetrics.siteScoped} site</Badge>
+          </div>
+        </div>
+        <div className="overflow-hidden rounded-md border">
+          <div className="w-full overflow-x-auto">
+            <Table className="min-w-[760px]">
             <TableHeader>
               <TableRow>
+                <TableHead className="w-16">Sr No</TableHead>
                 <TableHead>Code</TableHead>
                 <TableHead>Scope</TableHead>
                 <TableHead>Status</TableHead>
@@ -444,18 +651,23 @@ export default function PenaltyDefinitionsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {catalogCodes.length === 0 ? (
+              {filteredCodes.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={4}
+                    colSpan={5}
                     className="text-center text-sm text-muted-foreground"
                   >
-                    No codes yet. Add one to use in definitions.
+                    {catalogCodes.length === 0
+                      ? "No codes yet. Add one to use in definitions."
+                      : "No codes match this search."}
                   </TableCell>
                 </TableRow>
               ) : (
-                catalogCodes.map((c) => (
+                filteredCodes.map((c, idx) => (
                   <TableRow key={c.id}>
+                    <TableCell className="tabular-nums text-muted-foreground">
+                      {idx + 1}
+                    </TableCell>
                     <TableCell className="font-mono text-sm">{c.code}</TableCell>
                     <TableCell className="text-muted-foreground text-sm">
                       {warehouseScopeDisplayLabel(
@@ -472,36 +684,57 @@ export default function PenaltyDefinitionsPage() {
                       )}
                     </TableCell>
                     <TableCell className="text-right">
-                      {c.is_active ? (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="text-destructive hover:text-destructive"
-                          onClick={() => void onRemoveCode(c)}
-                        >
-                          Remove
-                        </Button>
-                      ) : (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => void onRestoreCode(c)}
-                        >
-                          Restore
-                        </Button>
-                      )}
+                      <div className="flex justify-end gap-2">
+                        {c.is_active ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="text-destructive hover:text-destructive"
+                            onClick={() => void onRemoveCode(c)}
+                          >
+                            Remove
+                          </Button>
+                        ) : (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => void onRestoreCode(c)}
+                          >
+                            Restore
+                          </Button>
+                        )}
+                        {userRole === "admin" ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                            onClick={() => void onDeleteCode(c)}
+                          >
+                            Delete
+                          </Button>
+                        ) : null}
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))
               )}
             </TableBody>
-          </Table>
+            </Table>
+          </div>
         </div>
       </div>
 
-      <div className="flex justify-end">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-lg font-medium">Definitions</h2>
+          <p className="text-xs text-muted-foreground">
+            Search and review configured penalties by scope, staff coverage, and
+            default amount.
+          </p>
+        </div>
         <Dialog
           open={open}
           onOpenChange={(v) => {
@@ -657,10 +890,36 @@ export default function PenaltyDefinitionsPage() {
         </Dialog>
       </div>
 
-      <div className="rounded-lg border">
-        <Table>
+      <div className="grid gap-2 sm:grid-cols-3">
+        <Input
+          value={definitionSearch}
+          onChange={(e) => setDefinitionSearch(e.target.value)}
+          placeholder="Search code, name, scope, staff type"
+          className="sm:col-span-2"
+        />
+        <Select
+          value={definitionScopeFilter}
+          onValueChange={(v) =>
+            setDefinitionScopeFilter(v as "all" | "global" | "site")
+          }
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All scopes</SelectItem>
+            <SelectItem value="global">Global only</SelectItem>
+            <SelectItem value="site">Site-specific only</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="overflow-hidden rounded-lg border">
+        <div className="w-full overflow-x-auto">
+          <Table className="min-w-[980px]">
           <TableHeader>
             <TableRow>
+              <TableHead className="w-16">Sr No</TableHead>
               <TableHead>Code</TableHead>
               <TableHead>Name</TableHead>
               <TableHead>Warehouse</TableHead>
@@ -670,18 +929,23 @@ export default function PenaltyDefinitionsPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {rows.length === 0 ? (
+            {filteredDefinitions.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={6}
+                  colSpan={7}
                   className="py-10 text-center text-muted-foreground"
                 >
-                  No definitions match this filter.
+                  {rows.length === 0
+                    ? "No definitions match this filter."
+                    : "No definitions match your search/scope filters."}
                 </TableCell>
               </TableRow>
             ) : (
-              rows.map((r) => (
+              filteredDefinitions.map((r, idx) => (
                 <TableRow key={String(r.id)}>
+                  <TableCell className="tabular-nums text-muted-foreground">
+                    {idx + 1}
+                  </TableCell>
                   <TableCell className="font-mono text-sm">
                     {String(r.code ?? "")}
                   </TableCell>
@@ -716,7 +980,8 @@ export default function PenaltyDefinitionsPage() {
               ))
             )}
           </TableBody>
-        </Table>
+          </Table>
+        </div>
       </div>
     </div>
   );

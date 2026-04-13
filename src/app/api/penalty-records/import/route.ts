@@ -18,6 +18,8 @@ type ImportResult = {
 };
 
 const MAX_ROWS = 200;
+const PENALTY_CODE_HEADER = "penalty_code";
+const PENALTY_DEFINITION_ID_HEADER = "penalty_definition_id";
 
 export async function POST(req: NextRequest) {
   try {
@@ -73,6 +75,28 @@ export async function POST(req: NextRequest) {
       staffByEmployeeCode.set(key, String(s.id));
     }
 
+    const { data: definitionRows, error: definitionErr } = await adminClient
+      .from("penalty_definitions")
+      .select("id, warehouse_id, penalty_codes!inner(code)")
+      .or(`warehouse_id.is.null,warehouse_id.eq.${warehouseId}`)
+      .eq("is_active", true);
+    if (definitionErr) throw new Error(definitionErr.message);
+
+    const penaltyDefinitionIdByCode = new Map<string, string>();
+    for (const def of definitionRows ?? []) {
+      const code = String(
+        (def.penalty_codes as { code?: string } | null | undefined)?.code ?? ""
+      )
+        .trim()
+        .toUpperCase();
+      if (!code) continue;
+      const isWarehouseSpecific = String(def.warehouse_id ?? "") === warehouseId;
+      const alreadyMapped = penaltyDefinitionIdByCode.has(code);
+      if (!alreadyMapped || isWarehouseSpecific) {
+        penaltyDefinitionIdByCode.set(code, String(def.id));
+      }
+    }
+
     const results: ImportResult[] = [];
     let created = 0;
     let failed = 0;
@@ -83,18 +107,21 @@ export async function POST(req: NextRequest) {
       const employeeCode = String(row.employee_code ?? "")
         .trim()
         .toUpperCase();
-      const penaltyDefinitionId = String(row.penalty_definition_id ?? "").trim();
+      const penaltyCode = String(row[PENALTY_CODE_HEADER] ?? "")
+        .trim()
+        .toUpperCase();
+      const penaltyDefinitionId = String(row[PENALTY_DEFINITION_ID_HEADER] ?? "").trim();
       const incidentDate = String(row.incident_date ?? "").trim();
       const notes = String(row.notes ?? "").trim();
       const overrideAmountRaw = String(row.override_amount ?? "").trim();
 
-      if (!employeeCode || !penaltyDefinitionId || !incidentDate) {
+      if (!employeeCode || (!penaltyCode && !penaltyDefinitionId) || !incidentDate) {
         failed += 1;
         results.push({
           row_number,
           status: "error",
           message:
-            "Required columns: employee_code, penalty_definition_id, incident_date"
+            "Required columns: employee_code, incident_date, and either penalty_code or penalty_definition_id"
         });
         continue;
       }
@@ -110,9 +137,23 @@ export async function POST(req: NextRequest) {
         continue;
       }
 
+      let resolvedPenaltyDefinitionId = penaltyDefinitionId;
+      if (!resolvedPenaltyDefinitionId && penaltyCode) {
+        resolvedPenaltyDefinitionId = penaltyDefinitionIdByCode.get(penaltyCode) ?? "";
+        if (!resolvedPenaltyDefinitionId) {
+          failed += 1;
+          results.push({
+            row_number,
+            status: "error",
+            message: `Unknown penalty_code "${penaltyCode}" for selected site`
+          });
+          continue;
+        }
+      }
+
       const payload: Record<string, unknown> = {
         staff_id: staffId,
-        penalty_definition_id: penaltyDefinitionId,
+        penalty_definition_id: resolvedPenaltyDefinitionId,
         warehouse_id: warehouseId,
         incident_date: incidentDate,
         notes: notes || null,

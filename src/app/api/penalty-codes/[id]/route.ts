@@ -47,3 +47,45 @@ export async function PATCH(
     return toErrorResponse(e);
   }
 }
+
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    await requireRole(["admin"]);
+
+    const { data: codeRow, error: codeErr } = await adminClient
+      .from("penalty_codes")
+      .select("id")
+      .eq("id", params.id)
+      .maybeSingle();
+    if (codeErr) throw new Error(codeErr.message);
+    if (!codeRow) {
+      throw new HttpError("NOT_FOUND", "Penalty code not found", 404);
+    }
+
+    const { count: definitionCount, error: defErr } = await adminClient
+      .from("penalty_definitions")
+      .select("id", { count: "exact", head: true })
+      .eq("penalty_code_id", params.id);
+    if (defErr) throw new Error(defErr.message);
+    if ((definitionCount ?? 0) > 0) {
+      throw new HttpError(
+        "CONFLICT",
+        "Cannot delete code that is used by existing definitions",
+        409
+      );
+    }
+
+    const { error: delErr } = await adminClient
+      .from("penalty_codes")
+      .delete()
+      .eq("id", params.id);
+    if (delErr) throw new Error(delErr.message);
+
+    return jsonOk({ id: params.id, deleted: true });
+  } catch (e) {
+    return toErrorResponse(e);
+  }
+}

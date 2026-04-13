@@ -18,8 +18,8 @@ type ImportRowResult = {
   message?: string;
 };
 
-const SAMPLE = `employee_code,penalty_definition_id,incident_date,notes
-EMP-RIDER-001,00000000-0000-0000-0000-000000000000,2026-04-01,Late at shift start`;
+const SAMPLE = `employee_code,penalty_code,incident_date,notes
+EMP-RIDER-001,LATEIN,2026-04-01,Late at shift start`;
 
 export function PenaltyBulkImportPanel() {
   const { warehouseId, warehousesLoading, userRole } = useDashboardWarehouse();
@@ -82,9 +82,9 @@ export function PenaltyBulkImportPanel() {
         <CardTitle>Bulk penalty import</CardTitle>
         <CardDescription>
           Import penalties by CSV for the selected site. Required columns:{" "}
-          <code>employee_code</code>, <code>penalty_definition_id</code>,{" "}
+          <code>employee_code</code>, <code>penalty_code</code>,{" "}
           <code>incident_date</code>. Optional: <code>notes</code>,{" "}
-          <code>override_amount</code>.
+          <code>override_amount</code>, <code>penalty_definition_id</code> (legacy).
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">

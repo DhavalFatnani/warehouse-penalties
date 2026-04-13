@@ -82,6 +82,9 @@ export default function SettlementPage() {
     "created" | "settled" | "all"
   >("created");
   const [allTime, setAllTime] = useState(false);
+  const [viewMode, setViewMode] = useState<"operations" | "manager">(
+    "operations"
+  );
 
   const [loading, setLoading] = useState(false);
   const [groups, setGroups] = useState<PreviewGroup[]>([]);
@@ -121,6 +124,25 @@ export default function SettlementPage() {
       cancelled = true;
     };
   }, [warehouseId]);
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem("settlement:view-mode");
+      if (stored === "operations" || stored === "manager") {
+        setViewMode(stored);
+      }
+    } catch {
+      /* ignore localStorage read errors */
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("settlement:view-mode", viewMode);
+    } catch {
+      /* ignore localStorage write errors */
+    }
+  }, [viewMode]);
 
   const loadPreview = useCallback(async () => {
     setLoading(true);
@@ -314,6 +336,15 @@ export default function SettlementPage() {
         ? "By staff type"
         : "By warehouse";
 
+  const highestGroup = useMemo(() => {
+    if (!groups.length) return null;
+    return [...groups].sort((a, b) => b.total - a.total)[0] ?? null;
+  }, [groups]);
+
+  const averagePenalty = metrics.totalRecords
+    ? metrics.totalAmount / metrics.totalRecords
+    : 0;
+
   return (
     <div className="mx-auto w-full max-w-[min(100%,72rem)] space-y-6">
       <div>
@@ -326,14 +357,41 @@ export default function SettlementPage() {
         </p>
       </div>
 
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-card p-2">
+        <div className="px-2">
+          <p className="text-sm font-medium">View mode</p>
+          <p className="text-xs text-muted-foreground">
+            Switch between workflow and analytics detail.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant={viewMode === "operations" ? "default" : "outline"}
+            onClick={() => setViewMode("operations")}
+          >
+            Operations
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={viewMode === "manager" ? "default" : "outline"}
+            onClick={() => setViewMode("manager")}
+          >
+            Manager
+          </Button>
+        </div>
+      </div>
+
       <Card className="overflow-hidden shadow-sm">
-        <CardHeader className="border-b bg-muted/30 px-3 py-2 sm:px-4">
+        <CardHeader className="border-b bg-muted/30 px-4 py-3 sm:px-5">
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0">
-              <CardTitle className="text-sm font-semibold">
+              <CardTitle className="text-base font-semibold">
                 Filters &amp; preview
               </CardTitle>
-              <CardDescription className="text-[11px] leading-snug">
+              <CardDescription className="text-xs leading-snug">
                 Preview updates as you change filters. Site:{" "}
                 <span className="font-medium text-foreground">{siteLabel}</span>
               </CardDescription>
@@ -344,7 +402,7 @@ export default function SettlementPage() {
               size="sm"
               disabled={loading}
               onClick={() => void loadPreview()}
-              className="h-8 shrink-0 gap-1 px-2 text-xs"
+              className="h-9 shrink-0 gap-1.5 px-3 text-sm"
             >
               <RefreshCw
                 className={cn("h-3 w-3", loading && "animate-spin")}
@@ -354,14 +412,14 @@ export default function SettlementPage() {
             </Button>
           </div>
         </CardHeader>
-        <CardContent className="space-y-2 p-3 sm:p-4">
+        <CardContent className="space-y-4 p-4 sm:p-5">
           {/* Dates + all-time */}
-          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
             <div className="grid grid-cols-2 gap-2 sm:max-w-[17rem]">
-              <div className="space-y-0.5">
+              <div className="space-y-1">
                 <Label
                   htmlFor="settle-from"
-                  className="text-[10px] uppercase tracking-wide text-muted-foreground"
+                  className="text-xs uppercase tracking-wide text-muted-foreground"
                 >
                   From
                 </Label>
@@ -371,13 +429,13 @@ export default function SettlementPage() {
                   value={from}
                   disabled={allTime}
                   onChange={(e) => setFrom(e.target.value)}
-                  className="h-8 bg-background text-xs"
+                  className="h-9 bg-background text-sm"
                 />
               </div>
-              <div className="space-y-0.5">
+              <div className="space-y-1">
                 <Label
                   htmlFor="settle-to"
-                  className="text-[10px] uppercase tracking-wide text-muted-foreground"
+                  className="text-xs uppercase tracking-wide text-muted-foreground"
                 >
                   To
                 </Label>
@@ -387,13 +445,13 @@ export default function SettlementPage() {
                   value={to}
                   disabled={allTime}
                   onChange={(e) => setTo(e.target.value)}
-                  className="h-8 bg-background text-xs"
+                  className="h-9 bg-background text-sm"
                 />
               </div>
             </div>
             <label
               className={cn(
-                "flex cursor-pointer items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs sm:ml-0",
+                "flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm sm:ml-0",
                 allTime
                   ? "border-primary/40 bg-primary/[0.06]"
                   : "border-transparent bg-muted/40"
@@ -410,10 +468,10 @@ export default function SettlementPage() {
           </div>
 
           {/* Filters row */}
-          <div className="flex flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-end">
+          <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-end">
             <div className="grid flex-1 grid-cols-2 gap-2 min-[520px]:grid-cols-4">
-              <div className="space-y-0.5">
-                <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
+              <div className="space-y-1">
+                <Label className="text-xs uppercase tracking-wide text-muted-foreground">
                   Status
                 </Label>
                 <Select
@@ -422,7 +480,7 @@ export default function SettlementPage() {
                     setStatusFilter(v as "created" | "settled" | "all")
                   }
                 >
-                  <SelectTrigger className="h-8 bg-background text-xs">
+                  <SelectTrigger className="h-9 bg-background text-sm">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -432,15 +490,15 @@ export default function SettlementPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-0.5">
-                <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
+              <div className="space-y-1">
+                <Label className="text-xs uppercase tracking-wide text-muted-foreground">
                   Staff type
                 </Label>
                 <Select
                   value={staffTypeId || "all"}
                   onValueChange={(v) => setStaffTypeId(v === "all" ? "" : v)}
                 >
-                  <SelectTrigger className="h-8 bg-background text-xs">
+                  <SelectTrigger className="h-9 bg-background text-sm">
                     <SelectValue placeholder="All types" />
                   </SelectTrigger>
                   <SelectContent>
@@ -453,15 +511,15 @@ export default function SettlementPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="col-span-2 space-y-0.5 min-[520px]:col-span-2">
-                <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
+              <div className="col-span-2 space-y-1 min-[520px]:col-span-2">
+                <Label className="text-xs uppercase tracking-wide text-muted-foreground">
                   Staff
                 </Label>
                 <Select
                   value={staffId || "all"}
                   onValueChange={(v) => setStaffId(v === "all" ? "" : v)}
                 >
-                  <SelectTrigger className="h-8 bg-background text-xs">
+                  <SelectTrigger className="h-9 bg-background text-sm">
                     <SelectValue placeholder="All staff" />
                   </SelectTrigger>
                   <SelectContent>
@@ -475,8 +533,8 @@ export default function SettlementPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="col-span-2 space-y-0.5 min-[520px]:col-span-1">
-                <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
+              <div className="col-span-2 space-y-1 min-[520px]:col-span-1">
+                <Label className="text-xs uppercase tracking-wide text-muted-foreground">
                   Group by
                 </Label>
                 <Select
@@ -485,7 +543,7 @@ export default function SettlementPage() {
                     setGroupBy(v as "staff" | "staff_type" | "warehouse")
                   }
                 >
-                  <SelectTrigger className="h-8 bg-background text-xs">
+                  <SelectTrigger className="h-9 bg-background text-sm">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -501,7 +559,7 @@ export default function SettlementPage() {
           {/* Compact metrics */}
           <div
             className={cn(
-              "flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-border/60 bg-muted/30 px-2.5 py-1.5 text-[11px]",
+              "flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-xs",
               loading && "opacity-60"
             )}
           >
@@ -531,36 +589,36 @@ export default function SettlementPage() {
           </div>
 
           {statusFilter === "created" && recordIds.length > 0 ? (
-            <p className="text-[11px] text-emerald-700 dark:text-emerald-400/90">
+            <p className="text-xs text-emerald-700 dark:text-emerald-400/90">
               <span className="font-semibold tabular-nums">{recordIds.length}</span>{" "}
               pending row{recordIds.length === 1 ? "" : "s"} will be settled in bulk.
             </p>
           ) : statusFilter === "created" && !loading && metrics.totalRecords === 0 ? (
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               No pending rows — widen dates or relax filters.
             </p>
           ) : null}
 
           <div className="flex flex-wrap gap-1">
-            <Badge variant="secondary" className="h-5 px-1.5 text-[10px] font-normal">
+            <Badge variant="secondary" className="h-6 px-2 text-xs font-normal">
               {statusLabel}
             </Badge>
-            <Badge variant="outline" className="h-5 max-w-[14rem] truncate px-1.5 text-[10px] font-normal">
+            <Badge variant="outline" className="h-6 max-w-[14rem] truncate px-2 text-xs font-normal">
               {dateRangeLabel}
             </Badge>
-            <Badge variant="outline" className="h-5 max-w-[12rem] truncate px-1.5 text-[10px] font-normal">
+            <Badge variant="outline" className="h-6 max-w-[12rem] truncate px-2 text-xs font-normal">
               {siteLabel}
             </Badge>
-            <Badge variant="outline" className="h-5 px-1.5 text-[10px] font-normal">
+            <Badge variant="outline" className="h-6 px-2 text-xs font-normal">
               {groupByLabel}
             </Badge>
             {selectedStaffTypeLabel ? (
-              <Badge variant="outline" className="h-5 max-w-[10rem] truncate px-1.5 text-[10px] font-normal">
+              <Badge variant="outline" className="h-6 max-w-[10rem] truncate px-2 text-xs font-normal">
                 {selectedStaffTypeLabel}
               </Badge>
             ) : null}
             {selectedStaffLabel ? (
-              <Badge variant="outline" className="h-5 max-w-[12rem] truncate px-1.5 text-[10px] font-normal">
+              <Badge variant="outline" className="h-6 max-w-[12rem] truncate px-2 text-xs font-normal">
                 {selectedStaffLabel}
               </Badge>
             ) : null}
@@ -569,14 +627,14 @@ export default function SettlementPage() {
           <Separator className="my-1" />
 
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               CSV matches preview. Settle only while status is pending.
             </p>
             <div className="flex flex-wrap gap-2">
               <Button
                 type="button"
                 size="sm"
-                className="h-8 text-xs"
+                className="h-9 text-sm"
                 onClick={() => void settleAll()}
                 disabled={
                   loading ||
@@ -590,7 +648,7 @@ export default function SettlementPage() {
                 type="button"
                 variant="secondary"
                 size="sm"
-                className="h-8 text-xs"
+                className="h-9 text-sm"
                 onClick={downloadCsv}
               >
                 <Download className="mr-1.5 h-3.5 w-3.5" />
@@ -601,87 +659,203 @@ export default function SettlementPage() {
         </CardContent>
       </Card>
 
-      <Card className="shadow-sm">
-        <CardHeader className="border-b bg-muted/20 px-4 py-3">
-          <CardTitle className="text-base">{groupSectionTitle}</CardTitle>
-          <CardDescription className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span className="tabular-nums font-medium text-foreground">
-              {metrics.groupCount}
-            </span>
-            <span>
-              {groupBy === "staff"
-                ? "staff buckets"
-                : groupBy === "staff_type"
-                  ? "type buckets"
-                  : "warehouse buckets"}
-            </span>
-            <span className="text-border">·</span>
-            <span className="tabular-nums">{metrics.totalRecords}</span>
-            <span>penalties</span>
-            <span className="text-border">·</span>
-            <span>{formatMoney(metrics.totalAmount)}</span>
-            <span>combined</span>
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          {groups.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No penalties match these filters.
-            </p>
-          ) : (
-            groups.map((g) => (
-              <Collapsible key={g.group_key} className="rounded-lg border">
-                <CollapsibleTrigger className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-muted/50">
-                  <div>
-                    <div className="font-medium">{g.title}</div>
-                    {g.subtitle ? (
-                      <div className="text-xs text-muted-foreground">
-                        {g.subtitle}
-                      </div>
-                    ) : null}
+      {viewMode === "operations" ? (
+        <Card className="shadow-sm">
+          <CardHeader className="border-b bg-muted/20 px-4 py-3">
+            <CardTitle className="text-base">
+              Operational drill-down · {groupSectionTitle}
+            </CardTitle>
+            <CardDescription className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span className="tabular-nums font-medium text-foreground">
+                {metrics.groupCount}
+              </span>
+              <span>
+                {groupBy === "staff"
+                  ? "staff buckets"
+                  : groupBy === "staff_type"
+                    ? "type buckets"
+                    : "warehouse buckets"}
+              </span>
+              <span className="text-border">·</span>
+              <span className="tabular-nums">{metrics.totalRecords}</span>
+              <span>penalties</span>
+              <span className="text-border">·</span>
+              <span>{formatMoney(metrics.totalAmount)}</span>
+              <span>combined</span>
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {groups.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No penalties match these filters.
+              </p>
+            ) : (
+              groups.map((g) => (
+                <Collapsible key={g.group_key} className="rounded-lg border">
+                  <CollapsibleTrigger className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-muted/50">
+                    <div>
+                      <div className="font-medium">{g.title}</div>
+                      {g.subtitle ? (
+                        <div className="text-xs text-muted-foreground">
+                          {g.subtitle}
+                        </div>
+                      ) : null}
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="tabular-nums font-semibold">
+                        {formatMoney(g.total)}
+                      </span>
+                      <ChevronDown className="h-4 w-4" />
+                    </div>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Staff</TableHead>
+                          <TableHead>Type</TableHead>
+                          <TableHead>Penalty</TableHead>
+                          <TableHead>Date</TableHead>
+                          <TableHead className="text-right">Amount</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {g.records.map((r) => (
+                          <TableRow key={String(r.id)}>
+                            <TableCell>
+                              {String(r.staff_full_name ?? "")}
+                            </TableCell>
+                            <TableCell className="text-muted-foreground">
+                              {String(r.staff_type_name ?? "")}
+                            </TableCell>
+                            <TableCell>{String(r.penalty_title ?? "")}</TableCell>
+                            <TableCell>{String(r.incident_date ?? "")}</TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {formatMoney(Number(r.computed_amount ?? 0))}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </CollapsibleContent>
+                </Collapsible>
+              ))
+            )}
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardDescription>Total exposure</CardDescription>
+                <CardTitle className="text-2xl tabular-nums">
+                  {formatMoney(metrics.totalAmount)}
+                </CardTitle>
+              </CardHeader>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardDescription>Penalty count</CardDescription>
+                <CardTitle className="text-2xl tabular-nums">
+                  {metrics.totalRecords}
+                </CardTitle>
+              </CardHeader>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardDescription>Average penalty</CardDescription>
+                <CardTitle className="text-2xl tabular-nums">
+                  {formatMoney(averagePenalty)}
+                </CardTitle>
+              </CardHeader>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardDescription>Coverage</CardDescription>
+                <CardTitle className="text-2xl tabular-nums">
+                  {metrics.distinctStaff} staff
+                </CardTitle>
+              </CardHeader>
+            </Card>
+          </div>
+
+          <Card className="shadow-sm">
+            <CardHeader className="border-b bg-muted/20 px-4 py-3">
+              <CardTitle className="text-base">Manager insights</CardTitle>
+              <CardDescription>
+                Top contributors and concentration for the current filters.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4 p-4">
+              {groups.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No penalties available for insights.
+                </p>
+              ) : (
+                <>
+                  <div className="rounded-lg border bg-muted/20 p-3">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                      Highest impact bucket
+                    </p>
+                    <p className="mt-1 text-base font-semibold">
+                      {highestGroup?.title ?? "—"}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {highestGroup?.count ?? 0} penalties ·{" "}
+                      {formatMoney(highestGroup?.total ?? 0)}
+                    </p>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <span className="tabular-nums font-semibold">
-                      {formatMoney(g.total)}
-                    </span>
-                    <ChevronDown className="h-4 w-4" />
-                  </div>
-                </CollapsibleTrigger>
-                <CollapsibleContent>
+
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Staff</TableHead>
-                        <TableHead>Type</TableHead>
-                        <TableHead>Penalty</TableHead>
-                        <TableHead>Date</TableHead>
+                        <TableHead>Bucket</TableHead>
+                        <TableHead className="text-right">Penalties</TableHead>
                         <TableHead className="text-right">Amount</TableHead>
+                        <TableHead className="text-right">
+                          Share of total
+                        </TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {g.records.map((r) => (
-                        <TableRow key={String(r.id)}>
-                          <TableCell>
-                            {String(r.staff_full_name ?? "")}
-                          </TableCell>
-                          <TableCell className="text-muted-foreground">
-                            {String(r.staff_type_name ?? "")}
-                          </TableCell>
-                          <TableCell>{String(r.penalty_title ?? "")}</TableCell>
-                          <TableCell>{String(r.incident_date ?? "")}</TableCell>
-                          <TableCell className="text-right tabular-nums">
-                            {formatMoney(Number(r.computed_amount ?? 0))}
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                      {[...groups]
+                        .sort((a, b) => b.total - a.total)
+                        .slice(0, 8)
+                        .map((g) => {
+                          const share = metrics.totalAmount
+                            ? (g.total / metrics.totalAmount) * 100
+                            : 0;
+                          return (
+                            <TableRow key={g.group_key}>
+                              <TableCell>
+                                <div className="font-medium">{g.title}</div>
+                                {g.subtitle ? (
+                                  <div className="text-xs text-muted-foreground">
+                                    {g.subtitle}
+                                  </div>
+                                ) : null}
+                              </TableCell>
+                              <TableCell className="text-right tabular-nums">
+                                {g.count}
+                              </TableCell>
+                              <TableCell className="text-right tabular-nums">
+                                {formatMoney(g.total)}
+                              </TableCell>
+                              <TableCell className="text-right tabular-nums">
+                                {share.toFixed(1)}%
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
                     </TableBody>
                   </Table>
-                </CollapsibleContent>
-              </Collapsible>
-            ))
-          )}
-        </CardContent>
-      </Card>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }

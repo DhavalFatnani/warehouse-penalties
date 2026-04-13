@@ -77,14 +77,14 @@ export function DashboardShell({
   }, [toggleNav]);
 
   return (
-    <div className="flex min-h-[100dvh] w-full">
+    <div className="flex h-[100dvh] w-full overflow-hidden">
         <aside className="hidden w-[240px] shrink-0 overflow-x-hidden md:block lg:w-[260px]">
-          <div className="sticky top-0 h-[100dvh] min-w-0">
+          <div className="h-full min-w-0">
             <SidebarPanel role={role} />
           </div>
         </aside>
 
-        <div className="flex min-w-0 flex-1 flex-col">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           <header
             className={cn(
               "sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b border-border/80 bg-background/80 px-3 backdrop-blur-md",
@@ -134,7 +134,7 @@ export function DashboardShell({
             </Button>
           </header>
 
-        <main className="flex-1 overflow-auto px-4 py-6 sm:px-6 md:px-8 md:py-8">
+        <main className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 py-6 sm:px-6 md:px-8 md:py-8">
           <div key={pathname} className="animate-fade-up">
             {children}
           </div>
